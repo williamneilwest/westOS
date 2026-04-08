@@ -294,11 +294,15 @@ const runtimeStyles = {
 const metricOptions = [
   { id: 'count', label: 'Row count' },
   { id: 'unique', label: 'Unique values' },
+  { id: 'top', label: 'Top value' },
+  { id: 'blank', label: 'Blank values' },
   { id: 'sum', label: 'Sum' },
   { id: 'avg', label: 'Average' },
   { id: 'min', label: 'Minimum' },
   { id: 'max', label: 'Maximum' },
 ]
+
+const WORK_PRESET_STORAGE_KEY = 'westos-work-presets'
 
 function ExternalArrow() {
   return <span aria-hidden="true">↗</span>
@@ -403,13 +407,30 @@ function metricValue(rows, column, metric) {
   const numericValues = rows
     .map((row) => Number.parseFloat(String(row[column] ?? '').replace(/,/g, '')))
     .filter((value) => Number.isFinite(value))
+  const values = rows.map((row) => String(row[column] ?? '').trim())
 
   if (metric === 'count') {
     return rows.length.toLocaleString()
   }
 
   if (metric === 'unique') {
-    return new Set(rows.map((row) => String(row[column] ?? ''))).size.toLocaleString()
+    return new Set(values.filter(Boolean)).size.toLocaleString()
+  }
+
+  if (metric === 'blank') {
+    return values.filter((value) => !value).length.toLocaleString()
+  }
+
+  if (metric === 'top') {
+    const counts = values
+      .filter(Boolean)
+      .reduce((accumulator, value) => {
+        accumulator[value] = (accumulator[value] || 0) + 1
+        return accumulator
+      }, {})
+
+    const topEntry = Object.entries(counts).sort((left, right) => right[1] - left[1])[0]
+    return topEntry ? `${topEntry[0]} (${topEntry[1]})` : 'n/a'
   }
 
   if (!numericValues.length) {
@@ -435,6 +456,75 @@ function metricValue(rows, column, metric) {
   }
 
   return 'n/a'
+}
+
+function parseDateValue(value) {
+  const match = String(value || '').trim().match(
+    /^(\d{2})-(\d{2})-(\d{4}) (\d{1,2}):(\d{2}):(\d{2}) (AM|PM)$/i,
+  )
+  if (!match) {
+    return null
+  }
+
+  let [, month, day, year, hour, minute, second, meridiem] = match
+  let normalizedHour = Number(hour)
+  if (meridiem.toUpperCase() === 'PM' && normalizedHour !== 12) {
+    normalizedHour += 12
+  }
+  if (meridiem.toUpperCase() === 'AM' && normalizedHour === 12) {
+    normalizedHour = 0
+  }
+
+  const date = new Date(Number(year), Number(month) - 1, Number(day), normalizedHour, Number(minute), Number(second))
+  return Number.isNaN(date.getTime()) ? null : date.getTime()
+}
+
+function compareValues(left, right) {
+  const leftDate = parseDateValue(left)
+  const rightDate = parseDateValue(right)
+  if (leftDate !== null && rightDate !== null) {
+    return leftDate - rightDate
+  }
+
+  const leftNumber = Number.parseFloat(String(left ?? '').replace(/,/g, ''))
+  const rightNumber = Number.parseFloat(String(right ?? '').replace(/,/g, ''))
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return leftNumber - rightNumber
+  }
+
+  return String(left ?? '').localeCompare(String(right ?? ''), undefined, { numeric: true, sensitivity: 'base' })
+}
+
+function buildChartData(rows, column) {
+  const counts = rows.reduce((accumulator, row) => {
+    const key = String(row[column] || 'Blank').trim() || 'Blank'
+    accumulator[key] = (accumulator[key] || 0) + 1
+    return accumulator
+  }, {})
+
+  return Object.entries(counts)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 8)
+    .map(([label, value]) => ({ label, value }))
+}
+
+function downloadTextFile(filename, contents) {
+  const blob = new Blob([contents], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+function toCsvString(headers, rows) {
+  const escapeCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`
+  const lines = [
+    headers.map(escapeCell).join(','),
+    ...rows.map((row) => headers.map((header) => escapeCell(row[header])).join(',')),
+  ]
+  return lines.join('\n')
 }
 
 function useServiceStatuses() {
@@ -896,9 +986,23 @@ function Work() {
   const [rows, setRows] = useState([])
   const [filters, setFilters] = useState({})
   const [selectedMetricColumn, setSelectedMetricColumn] = useState('')
-  const [enabledMetrics, setEnabledMetrics] = useState(['count', 'unique', 'avg'])
+  const [enabledMetrics, setEnabledMetrics] = useState(['count', 'unique', 'top'])
+  const [chartColumn, setChartColumn] = useState('')
+  const [sortColumn, setSortColumn] = useState('')
+  const [sortDirection, setSortDirection] = useState('asc')
+  const [presetName, setPresetName] = useState('')
+  const [savedPresets, setSavedPresets] = useState([])
   const [fileName, setFileName] = useState('')
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(WORK_PRESET_STORAGE_KEY)
+      setSavedPresets(raw ? JSON.parse(raw) : [])
+    } catch {
+      setSavedPresets([])
+    }
+  }, [])
 
   const filteredRows = rows.filter((row) =>
     headers.every((header) => {
@@ -910,16 +1014,48 @@ function Work() {
     }),
   )
 
-  const visibleRows = filteredRows.slice(0, 250)
+  const sortedRows = [...filteredRows].sort((left, right) => {
+    if (!sortColumn) {
+      return 0
+    }
+    const comparison = compareValues(left[sortColumn], right[sortColumn])
+    return sortDirection === 'asc' ? comparison : -comparison
+  })
+
+  const visibleRows = sortedRows.slice(0, 250)
   const numericHeaders = headers.filter((header) =>
     rows.some((row) => Number.isFinite(Number.parseFloat(String(row[header] ?? '').replace(/,/g, '')))),
   )
+  const chartData = chartColumn ? buildChartData(sortedRows, chartColumn) : []
 
   useEffect(() => {
     if (!selectedMetricColumn && numericHeaders.length) {
       setSelectedMetricColumn(numericHeaders[0])
     }
   }, [numericHeaders, selectedMetricColumn])
+
+  useEffect(() => {
+    const fallbackMetricColumn =
+      headers.find((header) => ['state', 'assigned_to', 'assignment_group', 'priority', 'sys_class_name'].includes(header)) || headers[0] || ''
+
+    if (!selectedMetricColumn && fallbackMetricColumn) {
+      setSelectedMetricColumn(fallbackMetricColumn)
+    }
+
+    const fallbackChartColumn =
+      headers.find((header) => ['state', 'assigned_to', 'assignment_group', 'priority'].includes(header)) || headers[0] || ''
+
+    if (!chartColumn && fallbackChartColumn) {
+      setChartColumn(fallbackChartColumn)
+    }
+
+    if (!sortColumn && headers.includes('opened_at')) {
+      setSortColumn('opened_at')
+      setSortDirection('desc')
+    } else if (!sortColumn && headers[0]) {
+      setSortColumn(headers[0])
+    }
+  }, [headers, selectedMetricColumn, chartColumn, sortColumn])
 
   function handleFileUpload(event) {
     const file = event.target.files?.[0]
@@ -940,6 +1076,10 @@ function Work() {
         setFilters({})
         setError('')
         setFileName(file.name)
+        setSortColumn('')
+        setSortDirection('asc')
+        setChartColumn('')
+        setSelectedMetricColumn('')
       } catch (uploadError) {
         setHeaders([])
         setRows([])
@@ -958,6 +1098,50 @@ function Work() {
     setEnabledMetrics((current) =>
       current.includes(metricId) ? current.filter((item) => item !== metricId) : [...current, metricId],
     )
+  }
+
+  function savePreset() {
+    const name = presetName.trim()
+    if (!name) {
+      return
+    }
+
+    const nextPresets = [
+      { name, filters, sortColumn, sortDirection, chartColumn, selectedMetricColumn, enabledMetrics },
+      ...savedPresets.filter((preset) => preset.name !== name),
+    ].slice(0, 8)
+
+    setSavedPresets(nextPresets)
+    window.localStorage.setItem(WORK_PRESET_STORAGE_KEY, JSON.stringify(nextPresets))
+    setPresetName('')
+  }
+
+  function loadPreset(preset) {
+    setFilters(preset.filters || {})
+    setSortColumn(preset.sortColumn || '')
+    setSortDirection(preset.sortDirection || 'asc')
+    setChartColumn(preset.chartColumn || '')
+    setSelectedMetricColumn(preset.selectedMetricColumn || '')
+    setEnabledMetrics(preset.enabledMetrics || ['count', 'unique', 'top'])
+  }
+
+  function deletePreset(name) {
+    const nextPresets = savedPresets.filter((preset) => preset.name !== name)
+    setSavedPresets(nextPresets)
+    window.localStorage.setItem(WORK_PRESET_STORAGE_KEY, JSON.stringify(nextPresets))
+  }
+
+  function exportFilteredRows() {
+    downloadTextFile(`${fileName.replace(/\.csv$/i, '') || 'filtered-data'}-filtered.csv`, toCsvString(headers, sortedRows))
+  }
+
+  function toggleSort(header) {
+    if (sortColumn === header) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortColumn(header)
+    setSortDirection('asc')
   }
 
   return (
@@ -984,6 +1168,15 @@ function Work() {
                 <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileUpload} />
               </label>
               {fileName ? <span className="text-sm text-slate-300">{fileName}</span> : null}
+              {headers.length ? (
+                <button
+                  type="button"
+                  onClick={exportFilteredRows}
+                  className="rounded-full border border-white/10 bg-white/[0.03] px-5 py-3 text-sm text-slate-300 transition hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
+                >
+                  Download filtered CSV
+                </button>
+              ) : null}
             </div>
 
             <p className="mt-5 text-sm leading-7 text-slate-400">
@@ -1054,8 +1247,83 @@ function Work() {
             <div className="mt-8 rounded-[32px] border border-white/10 bg-white/[0.035] p-6 backdrop-blur">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
+                  <h3 className="text-2xl font-medium text-white">Sorting and presets</h3>
+                  <p className="mt-2 text-sm leading-7 text-slate-400">Save common filter/sort views for recurring ticket analysis.</p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <select
+                    value={sortColumn}
+                    onChange={(event) => setSortColumn(event.target.value)}
+                    className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-200/40"
+                  >
+                    {headers.map((header) => (
+                      <option key={header} value={header}>
+                        Sort: {header}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
+                    className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300 transition hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
+                  >
+                    {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3 xl:flex-row">
+                <input
+                  value={presetName}
+                  onChange={(event) => setPresetName(event.target.value)}
+                  placeholder="Preset name"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-200/40"
+                />
+                <button
+                  type="button"
+                  onClick={savePreset}
+                  className="rounded-2xl bg-white px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-cyan-100"
+                >
+                  Save preset
+                </button>
+              </div>
+
+              {savedPresets.length ? (
+                <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {savedPresets.map((preset) => (
+                    <div key={preset.name} className="rounded-[24px] border border-white/10 bg-slate-950/45 p-4">
+                      <div className="text-sm font-medium text-white">{preset.name}</div>
+                      <div className="mt-2 text-xs uppercase tracking-[0.24em] text-slate-500">
+                        {preset.sortColumn || 'No sort'} / {preset.sortDirection || 'asc'}
+                      </div>
+                      <div className="mt-4 flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => loadPreset(preset)}
+                          className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-slate-300 transition hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
+                        >
+                          Load
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deletePreset(preset.name)}
+                          className="rounded-full border border-rose-300/20 bg-rose-300/10 px-4 py-2 text-sm text-rose-100 transition hover:bg-rose-300/15"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-8 rounded-[32px] border border-white/10 bg-white/[0.035] p-6 backdrop-blur">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
                   <h3 className="text-2xl font-medium text-white">Metrics</h3>
-                  <p className="mt-2 text-sm leading-7 text-slate-400">Pick a column and turn on the metrics you want to see.</p>
+                  <p className="mt-2 text-sm leading-7 text-slate-400">Pick a column and turn on the metrics you want to see. Categorical metrics work well for ticket exports like the sample you shared.</p>
                 </div>
 
                 <select
@@ -1063,14 +1331,14 @@ function Work() {
                   onChange={(event) => setSelectedMetricColumn(event.target.value)}
                   className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-200/40"
                 >
-                  {numericHeaders.length ? (
-                    numericHeaders.map((header) => (
+                  {headers.length ? (
+                    headers.map((header) => (
                       <option key={header} value={header}>
                         {header}
                       </option>
                     ))
                   ) : (
-                    <option value="">No numeric columns detected</option>
+                    <option value="">No columns detected</option>
                   )}
                 </select>
               </div>
@@ -1109,6 +1377,45 @@ function Work() {
             </div>
 
             <div className="mt-8 rounded-[32px] border border-white/10 bg-white/[0.035] p-6 backdrop-blur">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="text-2xl font-medium text-white">Chart</h3>
+                  <p className="mt-2 text-sm leading-7 text-slate-400">Visualize the filtered result set by any categorical column.</p>
+                </div>
+
+                <select
+                  value={chartColumn}
+                  onChange={(event) => setChartColumn(event.target.value)}
+                  className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-200/40"
+                >
+                  {headers.map((header) => (
+                    <option key={header} value={header}>
+                      {header}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mt-6 space-y-4">
+                {chartData.map((item) => {
+                  const maxValue = chartData[0]?.value || 1
+                  const width = `${(item.value / maxValue) * 100}%`
+                  return (
+                    <div key={item.label}>
+                      <div className="mb-2 flex items-center justify-between gap-4 text-sm">
+                        <span className="truncate text-slate-300">{item.label}</span>
+                        <span className="text-white">{item.value}</span>
+                      </div>
+                      <div className="h-3 rounded-full bg-slate-950/60">
+                        <div className="h-3 rounded-full bg-gradient-to-r from-cyan-300 to-emerald-300" style={{ width }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="mt-8 rounded-[32px] border border-white/10 bg-white/[0.035] p-6 backdrop-blur">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h3 className="text-2xl font-medium text-white">Data preview</h3>
@@ -1127,7 +1434,14 @@ function Work() {
                     <tr>
                       {headers.map((header) => (
                         <th key={header} className="px-4 py-2 text-xs uppercase tracking-[0.24em] text-slate-500">
-                          {header}
+                          <button
+                            type="button"
+                            onClick={() => toggleSort(header)}
+                            className="flex items-center gap-2 whitespace-nowrap transition hover:text-white"
+                          >
+                            {header}
+                            {sortColumn === header ? (sortDirection === 'asc' ? '↑' : '↓') : null}
+                          </button>
                         </th>
                       ))}
                     </tr>
