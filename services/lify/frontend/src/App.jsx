@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Link, Route, Routes } from 'react-router-dom'
 
 const pillars = [
@@ -280,6 +281,15 @@ const statusStyles = {
   scaffold: 'border-white/15 bg-white/5 text-slate-300',
 }
 
+const runtimeStyles = {
+  online: 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100',
+  degraded: 'border-amber-300/25 bg-amber-300/10 text-amber-100',
+  offline: 'border-rose-300/25 bg-rose-300/10 text-rose-100',
+  unprobed: 'border-slate-300/15 bg-slate-300/10 text-slate-200',
+  scaffold: 'border-white/15 bg-white/5 text-slate-300',
+  loading: 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100',
+}
+
 function ExternalArrow() {
   return <span aria-hidden="true">↗</span>
 }
@@ -290,6 +300,57 @@ function StatusPill({ status }) {
       {status}
     </span>
   )
+}
+
+function RuntimePill({ status }) {
+  return (
+    <span className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.24em] ${runtimeStyles[status] || runtimeStyles.loading}`}>
+      {status}
+    </span>
+  )
+}
+
+function useServiceStatuses() {
+  const [serviceStatuses, setServiceStatuses] = useState({})
+  const [summary, setSummary] = useState(null)
+
+  useEffect(() => {
+    let active = true
+
+    async function loadStatuses() {
+      try {
+        const response = await fetch('/api/status/services')
+        if (!response.ok) {
+          throw new Error(`status ${response.status}`)
+        }
+
+        const payload = await response.json()
+        if (!active) {
+          return
+        }
+
+        const mapped = Object.fromEntries(payload.services.map((item) => [item.id, item]))
+        setServiceStatuses(mapped)
+        setSummary(payload.summary)
+      } catch (error) {
+        if (!active) {
+          return
+        }
+
+        setSummary({ error: true })
+      }
+    }
+
+    loadStatuses()
+    const intervalId = window.setInterval(loadStatuses, 30000)
+
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+    }
+  }, [])
+
+  return { serviceStatuses, summary }
 }
 
 function Logo() {
@@ -328,6 +389,8 @@ function SectionHeading({ eyebrow, title, body }) {
 }
 
 function Home() {
+  const { summary } = useServiceStatuses()
+
   return (
     <main>
       <section className="px-6 pb-16 pt-8 sm:px-8 lg:px-12">
@@ -429,11 +492,13 @@ function Home() {
                   <div className="mt-4 space-y-4">
                     <div className="flex items-center justify-between rounded-2xl bg-slate-950/45 px-4 py-3">
                       <span className="text-sm text-slate-300">Caddy edge</span>
-                      <span className="text-sm text-cyan-200">active</span>
+                      <span className="text-sm text-cyan-200">{summary ? `${summary.online} online` : 'checking'}</span>
                     </div>
                     <div className="flex items-center justify-between rounded-2xl bg-slate-950/45 px-4 py-3">
-                      <span className="text-sm text-slate-300">AI gateway</span>
-                      <span className="text-sm text-emerald-200">internal API</span>
+                      <span className="text-sm text-slate-300">Runtime checks</span>
+                      <span className="text-sm text-emerald-200">
+                        {summary?.error ? 'unavailable' : summary ? `${summary.offline} offline` : 'loading'}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between rounded-2xl bg-slate-950/45 px-4 py-3">
                       <span className="text-sm text-slate-300">Public landing</span>
@@ -537,6 +602,8 @@ function Home() {
 }
 
 function Stack() {
+  const { serviceStatuses, summary } = useServiceStatuses()
+
   return (
     <main className="px-6 pb-20 pt-8 sm:px-8 lg:px-12">
       <div className="mx-auto max-w-7xl">
@@ -558,7 +625,7 @@ function Stack() {
           <SectionHeading
             eyebrow="Stack"
             title="The current service layer"
-            body="Every service directory in westOS is listed here with its role, current state, docs, and UI link when a surface exists."
+            body="Every service directory in westOS is listed here with its role, current state, live runtime indicator, docs, and UI link when a surface exists."
           />
 
           <div className="rounded-[32px] border border-white/10 bg-white/[0.035] p-4 backdrop-blur">
@@ -582,6 +649,21 @@ function Stack() {
           </div>
         </div>
 
+        <div className="mb-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {[
+            { label: 'online', value: summary?.online },
+            { label: 'degraded', value: summary?.degraded },
+            { label: 'offline', value: summary?.offline },
+            { label: 'unprobed', value: summary?.unprobed },
+            { label: 'scaffold', value: summary?.scaffold },
+          ].map((item) => (
+            <div key={item.label} className="rounded-[24px] border border-white/10 bg-white/[0.035] px-5 py-5 backdrop-blur">
+              <div className="text-xs uppercase tracking-[0.28em] text-slate-500">{item.label}</div>
+              <div className="mt-3 text-3xl font-semibold text-white">{item.value ?? '-'}</div>
+            </div>
+          ))}
+        </div>
+
         <div className="mt-2 grid gap-5">
           {serviceDirectory.map((service) => (
             <article key={service.id} className="rounded-[32px] border border-white/10 bg-white/[0.035] p-6 backdrop-blur">
@@ -590,9 +672,13 @@ function Stack() {
                   <div className="flex flex-wrap items-center gap-3">
                     <h3 className="text-2xl font-medium text-white">{service.name}</h3>
                     <StatusPill status={service.status} />
+                    <RuntimePill status={serviceStatuses[service.id]?.status || 'loading'} />
                   </div>
                   <p className="mt-4 text-base leading-7 text-slate-300">{service.summary}</p>
                   <p className="mt-3 text-sm leading-7 text-slate-400">{service.details}</p>
+                  <p className="mt-3 text-sm leading-7 text-slate-500">
+                    {serviceStatuses[service.id]?.note || 'Status check pending.'}
+                  </p>
                 </div>
 
                 <div className="rounded-[24px] border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-slate-300">

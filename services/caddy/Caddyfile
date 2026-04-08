@@ -63,7 +63,13 @@ torrent.wnwest.com {
 }
 
 wnwest.com, www.wnwest.com {
-    reverse_proxy lify-frontend:80
+    handle /api/* {
+        reverse_proxy lify:5000
+    }
+
+    handle {
+        reverse_proxy lify-frontend:80
+    }
 }
 
 life.wnwest.com {
