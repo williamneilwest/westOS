@@ -66,9 +66,9 @@ const highlights = [
     body: 'Inventory, recipes, barcode intake, and future home automation services are part of the same system architecture.',
   },
   {
-    label: 'Self-hosted media',
-    title: 'Streaming, downloads, and storage',
-    body: 'Media and file services live alongside the app stack with cleaner boundaries, persistent data paths, and better operational visibility.',
+    label: 'Work tools',
+    title: 'Operational data helpers',
+    body: 'The platform can also host lightweight utilities for day-to-day work, like CSV analysis, filtering, and quick metrics.',
   },
 ]
 
@@ -84,6 +84,7 @@ const featuredLinks = [
   { label: 'AI chat', href: 'https://chat.wnwest.com' },
   { label: 'Pantry', href: 'https://pantry.wnwest.com' },
   { label: 'Recipes', href: 'https://recipes.wnwest.com' },
+  { label: 'Work tools', href: '/work' },
 ]
 
 const serviceDirectory = [
@@ -290,6 +291,15 @@ const runtimeStyles = {
   loading: 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100',
 }
 
+const metricOptions = [
+  { id: 'count', label: 'Row count' },
+  { id: 'unique', label: 'Unique values' },
+  { id: 'sum', label: 'Sum' },
+  { id: 'avg', label: 'Average' },
+  { id: 'min', label: 'Minimum' },
+  { id: 'max', label: 'Maximum' },
+]
+
 function ExternalArrow() {
   return <span aria-hidden="true">↗</span>
 }
@@ -308,6 +318,123 @@ function RuntimePill({ status }) {
       {status}
     </span>
   )
+}
+
+function parseCsv(text) {
+  const rows = []
+  let currentRow = []
+  let currentValue = ''
+  let inQuotes = false
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    const nextChar = text[index + 1]
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentValue += '"'
+        index += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (char === ',' && !inQuotes) {
+      currentRow.push(currentValue)
+      currentValue = ''
+      continue
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        index += 1
+      }
+      currentRow.push(currentValue)
+      rows.push(currentRow)
+      currentRow = []
+      currentValue = ''
+      continue
+    }
+
+    currentValue += char
+  }
+
+  if (currentValue.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentValue)
+    rows.push(currentRow)
+  }
+
+  return rows.filter((row) => row.some((cell) => String(cell || '').trim() !== ''))
+}
+
+function normalizeHeaders(rawHeaders) {
+  const seen = {}
+  return rawHeaders.map((header, index) => {
+    const base = String(header || '').trim() || `Column ${index + 1}`
+    if (!seen[base]) {
+      seen[base] = 1
+      return base
+    }
+    seen[base] += 1
+    return `${base} ${seen[base]}`
+  })
+}
+
+function toCsvDataset(text) {
+  const parsed = parseCsv(text)
+  if (!parsed.length) {
+    return { headers: [], rows: [] }
+  }
+
+  const headers = normalizeHeaders(parsed[0])
+  const rows = parsed.slice(1).map((row, rowIndex) => {
+    const record = { __rowId: `${rowIndex}` }
+    headers.forEach((header, headerIndex) => {
+      record[header] = String(row[headerIndex] ?? '').trim()
+    })
+    return record
+  })
+
+  return { headers, rows }
+}
+
+function metricValue(rows, column, metric) {
+  const numericValues = rows
+    .map((row) => Number.parseFloat(String(row[column] ?? '').replace(/,/g, '')))
+    .filter((value) => Number.isFinite(value))
+
+  if (metric === 'count') {
+    return rows.length.toLocaleString()
+  }
+
+  if (metric === 'unique') {
+    return new Set(rows.map((row) => String(row[column] ?? ''))).size.toLocaleString()
+  }
+
+  if (!numericValues.length) {
+    return 'n/a'
+  }
+
+  if (metric === 'sum') {
+    return numericValues.reduce((total, value) => total + value, 0).toLocaleString()
+  }
+
+  if (metric === 'avg') {
+    return (numericValues.reduce((total, value) => total + value, 0) / numericValues.length).toLocaleString(undefined, {
+      maximumFractionDigits: 2,
+    })
+  }
+
+  if (metric === 'min') {
+    return Math.min(...numericValues).toLocaleString()
+  }
+
+  if (metric === 'max') {
+    return Math.max(...numericValues).toLocaleString()
+  }
+
+  return 'n/a'
 }
 
 function useServiceStatuses() {
@@ -332,11 +459,10 @@ function useServiceStatuses() {
         const mapped = Object.fromEntries(payload.services.map((item) => [item.id, item]))
         setServiceStatuses(mapped)
         setSummary(payload.summary)
-      } catch (error) {
+      } catch {
         if (!active) {
           return
         }
-
         setSummary({ error: true })
       }
     }
@@ -364,6 +490,32 @@ function Logo() {
         <span className="block text-xs text-slate-400">platform landing page</span>
       </span>
     </Link>
+  )
+}
+
+function Nav({ current }) {
+  const items = [
+    { key: 'home', label: 'Home', to: '/' },
+    { key: 'stack', label: 'Stack', to: '/stack' },
+    { key: 'work', label: 'Work', to: '/work' },
+  ]
+
+  return (
+    <div className="flex items-center gap-3 text-sm text-slate-300">
+      {items.map((item) => (
+        <Link
+          key={item.key}
+          to={item.to}
+          className={`rounded-full px-4 py-2 transition ${
+            current === item.key
+              ? 'border border-white/10 bg-white/5 text-white hover:border-cyan-200/40 hover:bg-white/10'
+              : 'hover:bg-white/5 hover:text-white'
+          }`}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </div>
   )
 }
 
@@ -398,14 +550,7 @@ function Home() {
           <div className="sticky top-0 z-40 rounded-[28px] border border-white/10 bg-slate-950/55 px-5 py-4 backdrop-blur-xl">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <Logo />
-              <div className="flex items-center gap-3 text-sm text-slate-300">
-                <Link to="/" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white transition hover:border-cyan-200/40 hover:bg-white/10">
-                  Home
-                </Link>
-                <Link to="/stack" className="rounded-full px-4 py-2 transition hover:bg-white/5 hover:text-white">
-                  Stack
-                </Link>
-              </div>
+              <Nav current="home" />
             </div>
           </div>
 
@@ -430,10 +575,7 @@ function Home() {
               </p>
 
               <div className="mt-10 flex flex-wrap gap-4">
-                <Link
-                  to="/stack"
-                  className="rounded-full bg-white px-6 py-3 text-sm font-medium text-slate-950 transition hover:bg-cyan-100"
-                >
+                <Link to="/stack" className="rounded-full bg-white px-6 py-3 text-sm font-medium text-slate-950 transition hover:bg-cyan-100">
                   Explore the platform
                 </Link>
                 <a
@@ -444,20 +586,36 @@ function Home() {
                 >
                   View repository
                 </a>
+                <Link
+                  to="/work"
+                  className="rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/10"
+                >
+                  Open work tools
+                </Link>
               </div>
 
               <div className="mt-8 flex flex-wrap gap-3 text-sm text-slate-300">
-                {featuredLinks.map((item) => (
-                  <a
-                    key={item.label}
-                    href={item.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 transition hover:border-cyan-200/35 hover:bg-white/[0.08] hover:text-white"
-                  >
-                    {item.label} <ExternalArrow />
-                  </a>
-                ))}
+                {featuredLinks.map((item) =>
+                  item.href.startsWith('/') ? (
+                    <Link
+                      key={item.label}
+                      to={item.href}
+                      className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 transition hover:border-cyan-200/35 hover:bg-white/[0.08] hover:text-white"
+                    >
+                      {item.label}
+                    </Link>
+                  ) : (
+                    <a
+                      key={item.label}
+                      href={item.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 transition hover:border-cyan-200/35 hover:bg-white/[0.08] hover:text-white"
+                    >
+                      {item.label} <ExternalArrow />
+                    </a>
+                  ),
+                )}
               </div>
             </div>
 
@@ -491,14 +649,12 @@ function Home() {
                   </div>
                   <div className="mt-4 space-y-4">
                     <div className="flex items-center justify-between rounded-2xl bg-slate-950/45 px-4 py-3">
-                      <span className="text-sm text-slate-300">Caddy edge</span>
+                      <span className="text-sm text-slate-300">Runtime checks</span>
                       <span className="text-sm text-cyan-200">{summary ? `${summary.online} online` : 'checking'}</span>
                     </div>
                     <div className="flex items-center justify-between rounded-2xl bg-slate-950/45 px-4 py-3">
-                      <span className="text-sm text-slate-300">Runtime checks</span>
-                      <span className="text-sm text-emerald-200">
-                        {summary?.error ? 'unavailable' : summary ? `${summary.offline} offline` : 'loading'}
-                      </span>
+                      <span className="text-sm text-slate-300">Failures detected</span>
+                      <span className="text-sm text-emerald-200">{summary?.error ? 'unavailable' : summary ? `${summary.offline} offline` : 'loading'}</span>
                     </div>
                     <div className="flex items-center justify-between rounded-2xl bg-slate-950/45 px-4 py-3">
                       <span className="text-sm text-slate-300">Public landing</span>
@@ -531,24 +687,39 @@ function Home() {
           />
 
           <div className="mt-12 grid gap-6 lg:grid-cols-2">
-            {products.map((product) => (
-              <a
-                key={product.name}
-                href={product.href}
-                target={product.href.startsWith('http') ? '_blank' : undefined}
-                rel={product.href.startsWith('http') ? 'noreferrer' : undefined}
-                className={`group relative overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/50 p-8 transition hover:-translate-y-1 hover:border-white/20`}
-              >
-                <div className={`absolute inset-x-0 top-0 h-24 bg-gradient-to-r ${product.accent}`} />
-                <div className="relative">
-                  <h3 className="text-2xl font-medium text-white">{product.name}</h3>
-                  <p className="mt-4 max-w-xl leading-7 text-slate-300">{product.description}</p>
-                  <div className="mt-5 text-sm font-medium text-cyan-200">
-                    Open {product.href.startsWith('http') ? <ExternalArrow /> : '->'}
+            {products.map((product) =>
+              product.href.startsWith('/') ? (
+                <Link
+                  key={product.name}
+                  to={product.href}
+                  className="group relative overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/50 p-8 transition hover:-translate-y-1 hover:border-white/20"
+                >
+                  <div className={`absolute inset-x-0 top-0 h-24 bg-gradient-to-r ${product.accent}`} />
+                  <div className="relative">
+                    <h3 className="text-2xl font-medium text-white">{product.name}</h3>
+                    <p className="mt-4 max-w-xl leading-7 text-slate-300">{product.description}</p>
+                    <div className="mt-5 text-sm font-medium text-cyan-200">Open {'->'}</div>
                   </div>
-                </div>
-              </a>
-            ))}
+                </Link>
+              ) : (
+                <a
+                  key={product.name}
+                  href={product.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group relative overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/50 p-8 transition hover:-translate-y-1 hover:border-white/20"
+                >
+                  <div className={`absolute inset-x-0 top-0 h-24 bg-gradient-to-r ${product.accent}`} />
+                  <div className="relative">
+                    <h3 className="text-2xl font-medium text-white">{product.name}</h3>
+                    <p className="mt-4 max-w-xl leading-7 text-slate-300">{product.description}</p>
+                    <div className="mt-5 text-sm font-medium text-cyan-200">
+                      Open <ExternalArrow />
+                    </div>
+                  </div>
+                </a>
+              ),
+            )}
           </div>
         </div>
       </section>
@@ -572,31 +743,6 @@ function Home() {
           </div>
         </div>
       </section>
-
-      <section className="px-6 py-20 sm:px-8 lg:px-12">
-        <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.8fr_1.2fr]">
-          <SectionHeading
-            eyebrow="Design"
-            title="Minimal, but not blank."
-            body="The page uses hierarchy, spacing, contrast, and layered surfaces to stay sleek without looking unfinished."
-          />
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            {[
-              'Large editorial hero with technical framing',
-              'Soft glass panels over a dark atmospheric field',
-              'Compact cards instead of long paragraphs',
-              'Clear calls to action without conversion clutter',
-              'Readable density on desktop and mobile',
-              'One visual system across docs, routes, and services',
-            ].map((item) => (
-              <div key={item} className="rounded-[28px] border border-white/10 bg-white/[0.035] px-5 py-6 text-sm leading-7 text-slate-300">
-                {item}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
     </main>
   )
 }
@@ -610,14 +756,7 @@ function Stack() {
         <div className="sticky top-0 z-40 rounded-[28px] border border-white/10 bg-slate-950/55 px-5 py-4 backdrop-blur-xl">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <Logo />
-            <div className="flex items-center gap-3 text-sm text-slate-300">
-              <Link to="/" className="rounded-full px-4 py-2 transition hover:bg-white/5 hover:text-white">
-                Home
-              </Link>
-              <Link to="/stack" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white transition hover:border-cyan-200/40 hover:bg-white/10">
-                Stack
-              </Link>
-            </div>
+            <Nav current="stack" />
           </div>
         </div>
 
@@ -630,21 +769,37 @@ function Stack() {
 
           <div className="rounded-[32px] border border-white/10 bg-white/[0.035] p-4 backdrop-blur">
             <div className="grid gap-3">
-              {featuredLinks.map((item) => (
-                <article
-                  key={item.label}
-                  className="grid gap-3 rounded-[24px] border border-white/8 bg-slate-950/45 px-5 py-5 sm:grid-cols-[1.1fr_0.7fr_1fr] sm:items-center"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-white">{item.label}</p>
-                    <p className="mt-1 text-sm text-slate-400">{item.href.replace('https://', '')}</p>
-                  </div>
-                  <div className="text-sm uppercase tracking-[0.22em] text-cyan-200/80">public link</div>
-                  <a href={item.href} target="_blank" rel="noreferrer" className="text-sm text-slate-300 transition hover:text-white">
-                    Open <ExternalArrow />
-                  </a>
-                </article>
-              ))}
+              {featuredLinks.map((item) =>
+                item.href.startsWith('/') ? (
+                  <article
+                    key={item.label}
+                    className="grid gap-3 rounded-[24px] border border-white/8 bg-slate-950/45 px-5 py-5 sm:grid-cols-[1.1fr_0.7fr_1fr] sm:items-center"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-white">{item.label}</p>
+                      <p className="mt-1 text-sm text-slate-400">{item.href}</p>
+                    </div>
+                    <div className="text-sm uppercase tracking-[0.22em] text-cyan-200/80">internal route</div>
+                      <Link to={item.href} className="text-sm text-slate-300 transition hover:text-white">
+                        Open {'->'}
+                      </Link>
+                  </article>
+                ) : (
+                  <article
+                    key={item.label}
+                    className="grid gap-3 rounded-[24px] border border-white/8 bg-slate-950/45 px-5 py-5 sm:grid-cols-[1.1fr_0.7fr_1fr] sm:items-center"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-white">{item.label}</p>
+                      <p className="mt-1 text-sm text-slate-400">{item.href.replace('https://', '')}</p>
+                    </div>
+                    <div className="text-sm uppercase tracking-[0.22em] text-cyan-200/80">public link</div>
+                    <a href={item.href} target="_blank" rel="noreferrer" className="text-sm text-slate-300 transition hover:text-white">
+                      Open <ExternalArrow />
+                    </a>
+                  </article>
+                ),
+              )}
             </div>
           </div>
         </div>
@@ -676,9 +831,7 @@ function Stack() {
                   </div>
                   <p className="mt-4 text-base leading-7 text-slate-300">{service.summary}</p>
                   <p className="mt-3 text-sm leading-7 text-slate-400">{service.details}</p>
-                  <p className="mt-3 text-sm leading-7 text-slate-500">
-                    {serviceStatuses[service.id]?.note || 'Status check pending.'}
-                  </p>
+                  <p className="mt-3 text-sm leading-7 text-slate-500">{serviceStatuses[service.id]?.note || 'Status check pending.'}</p>
                 </div>
 
                 <div className="rounded-[24px] border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-slate-300">
@@ -698,9 +851,7 @@ function Stack() {
                     Open UI <ExternalArrow />
                   </a>
                 ) : (
-                  <span className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-slate-400">
-                    No direct UI
-                  </span>
+                  <span className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-slate-400">No direct UI</span>
                 )}
 
                 {service.extraUrl ? (
@@ -735,26 +886,268 @@ function Stack() {
             </article>
           ))}
         </div>
+      </div>
+    </main>
+  )
+}
 
-        <div className="rounded-[36px] border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] px-8 py-10">
-          <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Next step</p>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white">This page can go further without getting crowded.</h2>
-              <p className="mt-4 max-w-3xl leading-7 text-slate-300">
-                The next layer would be live service status, animated topology, and direct links into each service area, but the baseline should stay calm, sharp, and readable.
-              </p>
-            </div>
-            <a
-              href="https://github.com/williamneilwest/westOS"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex rounded-full border border-white/15 bg-slate-950/50 px-6 py-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/10"
-            >
-              Open repository
-            </a>
+function Work() {
+  const [headers, setHeaders] = useState([])
+  const [rows, setRows] = useState([])
+  const [filters, setFilters] = useState({})
+  const [selectedMetricColumn, setSelectedMetricColumn] = useState('')
+  const [enabledMetrics, setEnabledMetrics] = useState(['count', 'unique', 'avg'])
+  const [fileName, setFileName] = useState('')
+  const [error, setError] = useState('')
+
+  const filteredRows = rows.filter((row) =>
+    headers.every((header) => {
+      const needle = String(filters[header] || '').trim().toLowerCase()
+      if (!needle) {
+        return true
+      }
+      return String(row[header] || '').toLowerCase().includes(needle)
+    }),
+  )
+
+  const visibleRows = filteredRows.slice(0, 250)
+  const numericHeaders = headers.filter((header) =>
+    rows.some((row) => Number.isFinite(Number.parseFloat(String(row[header] ?? '').replace(/,/g, '')))),
+  )
+
+  useEffect(() => {
+    if (!selectedMetricColumn && numericHeaders.length) {
+      setSelectedMetricColumn(numericHeaders[0])
+    }
+  }, [numericHeaders, selectedMetricColumn])
+
+  function handleFileUpload(event) {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const text = String(reader.result || '')
+        const dataset = toCsvDataset(text)
+        if (!dataset.headers.length) {
+          throw new Error('No readable CSV columns were found.')
+        }
+        setHeaders(dataset.headers)
+        setRows(dataset.rows)
+        setFilters({})
+        setError('')
+        setFileName(file.name)
+      } catch (uploadError) {
+        setHeaders([])
+        setRows([])
+        setFilters({})
+        setFileName('')
+        setError(uploadError.message || 'Could not parse CSV file.')
+      }
+    }
+    reader.onerror = () => {
+      setError('Could not read the selected file.')
+    }
+    reader.readAsText(file)
+  }
+
+  function toggleMetric(metricId) {
+    setEnabledMetrics((current) =>
+      current.includes(metricId) ? current.filter((item) => item !== metricId) : [...current, metricId],
+    )
+  }
+
+  return (
+    <main className="px-6 pb-20 pt-8 sm:px-8 lg:px-12">
+      <div className="mx-auto max-w-7xl">
+        <div className="sticky top-0 z-40 rounded-[28px] border border-white/10 bg-slate-950/55 px-5 py-4 backdrop-blur-xl">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <Logo />
+            <Nav current="work" />
           </div>
         </div>
+
+        <div className="grid gap-10 py-14 lg:grid-cols-[0.9fr_1.1fr]">
+          <SectionHeading
+            eyebrow="Work Tools"
+            title="Upload a CSV, filter anything, and pull quick metrics."
+            body="This page is meant for practical work data. Upload a CSV, filter by any column, and choose the metrics you want based on the currently filtered result set."
+          />
+
+          <div className="rounded-[32px] border border-white/10 bg-white/[0.035] p-6 backdrop-blur">
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="inline-flex cursor-pointer rounded-full bg-white px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-cyan-100">
+                Upload CSV
+                <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileUpload} />
+              </label>
+              {fileName ? <span className="text-sm text-slate-300">{fileName}</span> : null}
+            </div>
+
+            <p className="mt-5 text-sm leading-7 text-slate-400">
+              Filtering and analysis run entirely in the browser. This is designed for quick inspection, not long pipeline jobs.
+            </p>
+
+            {error ? (
+              <div className="mt-5 rounded-[24px] border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100">{error}</div>
+            ) : null}
+          </div>
+        </div>
+
+        {!headers.length ? (
+          <div className="rounded-[32px] border border-dashed border-white/15 bg-white/[0.03] px-8 py-12 text-center text-slate-400">
+            Upload a CSV to start filtering rows and calculating metrics.
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.035] px-5 py-5 backdrop-blur">
+                <div className="text-xs uppercase tracking-[0.28em] text-slate-500">Rows loaded</div>
+                <div className="mt-3 text-3xl font-semibold text-white">{rows.length.toLocaleString()}</div>
+              </div>
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.035] px-5 py-5 backdrop-blur">
+                <div className="text-xs uppercase tracking-[0.28em] text-slate-500">Rows visible</div>
+                <div className="mt-3 text-3xl font-semibold text-white">{filteredRows.length.toLocaleString()}</div>
+              </div>
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.035] px-5 py-5 backdrop-blur">
+                <div className="text-xs uppercase tracking-[0.28em] text-slate-500">Columns</div>
+                <div className="mt-3 text-3xl font-semibold text-white">{headers.length}</div>
+              </div>
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.035] px-5 py-5 backdrop-blur">
+                <div className="text-xs uppercase tracking-[0.28em] text-slate-500">Visible preview</div>
+                <div className="mt-3 text-3xl font-semibold text-white">{visibleRows.length.toLocaleString()}</div>
+              </div>
+            </div>
+
+            <div className="mt-8 rounded-[32px] border border-white/10 bg-white/[0.035] p-6 backdrop-blur">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="text-2xl font-medium text-white">Filters</h3>
+                  <p className="mt-2 text-sm leading-7 text-slate-400">Filter the table by any column using partial text matches.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFilters({})}
+                  className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-slate-300 transition hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
+                >
+                  Clear filters
+                </button>
+              </div>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {headers.map((header) => (
+                  <label key={header} className="block">
+                    <span className="mb-2 block text-sm text-slate-300">{header}</span>
+                    <input
+                      value={filters[header] || ''}
+                      onChange={(event) => setFilters((current) => ({ ...current, [header]: event.target.value }))}
+                      placeholder={`Filter ${header}`}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-200/40"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-8 rounded-[32px] border border-white/10 bg-white/[0.035] p-6 backdrop-blur">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="text-2xl font-medium text-white">Metrics</h3>
+                  <p className="mt-2 text-sm leading-7 text-slate-400">Pick a column and turn on the metrics you want to see.</p>
+                </div>
+
+                <select
+                  value={selectedMetricColumn}
+                  onChange={(event) => setSelectedMetricColumn(event.target.value)}
+                  className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-200/40"
+                >
+                  {numericHeaders.length ? (
+                    numericHeaders.map((header) => (
+                      <option key={header} value={header}>
+                        {header}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No numeric columns detected</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                {metricOptions.map((metric) => (
+                  <button
+                    key={metric.id}
+                    type="button"
+                    onClick={() => toggleMetric(metric.id)}
+                    className={`rounded-full border px-4 py-2 text-sm transition ${
+                      enabledMetrics.includes(metric.id)
+                        ? 'border-cyan-200/35 bg-cyan-300/10 text-cyan-100'
+                        : 'border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/25 hover:bg-white/[0.08] hover:text-white'
+                    }`}
+                  >
+                    {metric.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {enabledMetrics.map((metricId) => {
+                  const metric = metricOptions.find((item) => item.id === metricId)
+                  return (
+                    <div key={metricId} className="rounded-[24px] border border-white/10 bg-slate-950/45 px-5 py-5">
+                      <div className="text-xs uppercase tracking-[0.28em] text-slate-500">{metric?.label}</div>
+                      <div className="mt-3 text-3xl font-semibold text-white">
+                        {selectedMetricColumn ? metricValue(filteredRows, selectedMetricColumn, metricId) : 'n/a'}
+                      </div>
+                      <div className="mt-2 text-sm text-slate-400">{selectedMetricColumn || 'Select a numeric column'}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="mt-8 rounded-[32px] border border-white/10 bg-white/[0.035] p-6 backdrop-blur">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="text-2xl font-medium text-white">Data preview</h3>
+                  <p className="mt-2 text-sm leading-7 text-slate-400">
+                    Showing {visibleRows.length.toLocaleString()} of {filteredRows.length.toLocaleString()} filtered rows.
+                  </p>
+                </div>
+                {filteredRows.length > visibleRows.length ? (
+                  <div className="text-sm text-amber-100">Preview capped at 250 rows for readability.</div>
+                ) : null}
+              </div>
+
+              <div className="mt-6 overflow-x-auto">
+                <table className="min-w-full border-separate border-spacing-y-2 text-left text-sm">
+                  <thead>
+                    <tr>
+                      {headers.map((header) => (
+                        <th key={header} className="px-4 py-2 text-xs uppercase tracking-[0.24em] text-slate-500">
+                          {header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleRows.map((row) => (
+                      <tr key={row.__rowId} className="bg-slate-950/45">
+                        {headers.map((header) => (
+                          <td key={`${row.__rowId}-${header}`} className="max-w-[280px] rounded-xl px-4 py-3 align-top text-slate-200">
+                            <div className="truncate">{row[header] || '—'}</div>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </main>
   )
@@ -767,6 +1160,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/stack" element={<Stack />} />
+          <Route path="/work" element={<Work />} />
         </Routes>
       </Shell>
     </Router>
