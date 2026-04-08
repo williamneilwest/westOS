@@ -304,6 +304,8 @@ const metricOptions = [
 ]
 
 const WORK_PRESET_STORAGE_KEY = 'westos-work-presets'
+const WORK_RECENT_UPLOADS_STORAGE_KEY = 'westos-work-recent-uploads'
+const WORK_RECENT_UPLOAD_LIMIT = 10
 
 function ExternalArrow() {
   return <span aria-hidden="true">↗</span>
@@ -609,6 +611,7 @@ function Nav({ current }) {
     { key: 'home', label: 'Home', to: '/' },
     { key: 'stack', label: 'Stack', to: '/stack' },
     { key: 'work', label: 'Work', to: '/work' },
+    { key: 'portfolio', label: 'Portfolio', to: '/portfolio' },
   ]
 
   return (
@@ -1014,6 +1017,7 @@ function Work() {
   const [sortDirection, setSortDirection] = useState('asc')
   const [presetName, setPresetName] = useState('')
   const [savedPresets, setSavedPresets] = useState([])
+  const [recentUploads, setRecentUploads] = useState([])
   const [fileName, setFileName] = useState('')
   const [error, setError] = useState('')
 
@@ -1025,6 +1029,15 @@ function Work() {
       setSavedPresets(raw ? JSON.parse(raw) : [])
     } catch {
       setSavedPresets([])
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(WORK_RECENT_UPLOADS_STORAGE_KEY)
+      setRecentUploads(raw ? JSON.parse(raw) : [])
+    } catch {
+      setRecentUploads([])
     }
   }, [])
 
@@ -1094,6 +1107,57 @@ function Work() {
     }
   }, [headers, selectedMetricColumn, chartColumn, sortColumn])
 
+  function resetWorkState() {
+    setFilters({})
+    setDateFilters({})
+    setSortColumn('')
+    setSortDirection('asc')
+    setChartColumn('')
+    setSelectedMetricColumn('')
+  }
+
+  function storeRecentUpload(name, text, dataset) {
+    const nextUploads = [
+      {
+        id: `${name}-${Date.now()}`,
+        name,
+        text,
+        rowCount: dataset.rows.length,
+        columnCount: dataset.headers.length,
+        savedAt: new Date().toISOString(),
+      },
+      ...recentUploads.filter((item) => !(item.name === name && item.text === text)),
+    ].slice(0, WORK_RECENT_UPLOAD_LIMIT)
+
+    setRecentUploads(nextUploads)
+    window.localStorage.setItem(WORK_RECENT_UPLOADS_STORAGE_KEY, JSON.stringify(nextUploads))
+  }
+
+  function loadCsvDataset(name, text, options = {}) {
+    try {
+      const dataset = toCsvDataset(text)
+      if (!dataset.headers.length) {
+        throw new Error('No readable CSV columns were found.')
+      }
+
+      setHeaders(dataset.headers)
+      setRows(dataset.rows)
+      resetWorkState()
+      setError('')
+      setFileName(name)
+
+      if (options.persist !== false) {
+        storeRecentUpload(name, text, dataset)
+      }
+    } catch (loadError) {
+      setHeaders([])
+      setRows([])
+      resetWorkState()
+      setFileName('')
+      setError(loadError.message || 'Could not parse CSV file.')
+    }
+  }
+
   function handleFileUpload(event) {
     const file = event.target.files?.[0]
     if (!file) {
@@ -1102,35 +1166,19 @@ function Work() {
 
     const reader = new FileReader()
     reader.onload = () => {
-      try {
-        const text = String(reader.result || '')
-        const dataset = toCsvDataset(text)
-        if (!dataset.headers.length) {
-          throw new Error('No readable CSV columns were found.')
-        }
-        setHeaders(dataset.headers)
-        setRows(dataset.rows)
-        setFilters({})
-        setDateFilters({})
-        setError('')
-        setFileName(file.name)
-        setSortColumn('')
-        setSortDirection('asc')
-        setChartColumn('')
-        setSelectedMetricColumn('')
-      } catch (uploadError) {
-        setHeaders([])
-        setRows([])
-        setFilters({})
-        setDateFilters({})
-        setFileName('')
-        setError(uploadError.message || 'Could not parse CSV file.')
-      }
+      const text = String(reader.result || '')
+      loadCsvDataset(file.name, text)
     }
     reader.onerror = () => {
       setError('Could not read the selected file.')
     }
     reader.readAsText(file)
+  }
+
+  function removeRecentUpload(uploadId) {
+    const nextUploads = recentUploads.filter((item) => item.id !== uploadId)
+    setRecentUploads(nextUploads)
+    window.localStorage.setItem(WORK_RECENT_UPLOADS_STORAGE_KEY, JSON.stringify(nextUploads))
   }
 
   function toggleMetric(metricId) {
@@ -1237,6 +1285,57 @@ function Work() {
 
             {error ? (
               <div className="mt-5 rounded-[24px] border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100">{error}</div>
+            ) : null}
+
+            {recentUploads.length ? (
+              <div className="mt-6 rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.28em] text-cyan-200/70">Recent uploads</p>
+                    <p className="mt-2 text-sm leading-7 text-slate-400">
+                      Reload one of the last {WORK_RECENT_UPLOAD_LIMIT} CSV files without uploading it again.
+                    </p>
+                  </div>
+                  <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                    {recentUploads.length} saved locally
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                  {recentUploads.map((upload) => (
+                    <div key={upload.id} className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white">{upload.name}</p>
+                          <p className="mt-2 text-xs uppercase tracking-[0.22em] text-slate-500">
+                            {upload.rowCount.toLocaleString()} rows / {upload.columnCount.toLocaleString()} columns
+                          </p>
+                        </div>
+                        <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-slate-400">
+                          {new Date(upload.savedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => loadCsvDataset(upload.name, upload.text, { persist: false })}
+                          className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-100"
+                        >
+                          Load file
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeRecentUpload(upload.id)}
+                          className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-slate-300 transition hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : null}
           </div>
         </div>
