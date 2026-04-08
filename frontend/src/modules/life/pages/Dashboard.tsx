@@ -26,8 +26,8 @@ type OverviewBlock = {
   visible: boolean;
 };
 
-const MODE_STORAGE_KEY = 'lifeos-dashboard-mode';
-const OVERVIEW_LAYOUT_STORAGE_KEY = 'lifeos-overview-layout-v1';
+const MODE_STORAGE_KEY = 'westos-dashboard-mode';
+const OVERVIEW_LAYOUT_STORAGE_KEY = 'westos-overview-layout-v1';
 
 const MODE_TABS: Array<{ id: DashboardMode; label: string }> = [
   { id: 'overview', label: 'Overview' },

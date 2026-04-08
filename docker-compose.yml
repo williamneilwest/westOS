@@ -1,51 +1,13 @@
 services:
-  frontend:
-    image: node:20
+  westos-frontend:
+    build: ./frontend
     container_name: westos-frontend
-    working_dir: /app/frontend
-    volumes:
-      - ./frontend:/app/frontend
-    command: sh -c "npm install && npm run dev"
     ports:
       - "5173:5173"
-    depends_on:
-      - backend
-    networks:
-      - westos
-
-  backend:
-    build:
-      context: ./backend
-    container_name: westos-backend
-    working_dir: /app/backend
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://lifeos:lifeos@db:5432/lifeos}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://life.localhost:5173,https://wnwest.com,https://life.wnwest.com}
-      FLASK_ENV: ${FLASK_ENV:-development}
-    ports:
-      - "5000:5000"
-    depends_on:
-      - db
-    networks:
-      - westos
-
-  db:
-    image: postgres:15
-    container_name: westos-db
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-lifeos}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lifeos}
-      POSTGRES_DB: ${POSTGRES_DB:-lifeos}
-    ports:
-      - "5432:5432"
-    volumes:
-      - westos_postgres_data:/var/lib/postgresql/data
     networks:
       - westos
 
 networks:
   westos:
-    name: westos
-
-volumes:
-  westos_postgres_data:
+    external: true
+    name: westOS

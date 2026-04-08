@@ -11,6 +11,6 @@ export default defineConfig({
         host: '0.0.0.0',
         port: 5173,
         strictPort: true,
-        allowedHosts: ['wnwest.com', 'life.wnwest.com', 'localhost', '127.0.0.1', 'life.localhost'],
+        allowedHosts: ['wnwest.com', 'www.wnwest.com', 'localhost', '127.0.0.1'],
     },
 });
