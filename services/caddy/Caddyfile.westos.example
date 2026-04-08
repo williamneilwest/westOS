@@ -1,0 +1,11 @@
+wnwest.com, www.wnwest.com {
+  reverse_proxy frontend:5173
+}
+
+life.wnwest.com {
+  reverse_proxy frontend:5173
+}
+
+api.wnwest.com {
+  reverse_proxy backend:5000
+}

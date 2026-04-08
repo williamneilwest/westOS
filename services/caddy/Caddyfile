@@ -67,6 +67,62 @@ wnwest.com, www.wnwest.com {
         reverse_proxy lify:5000
     }
 
+    handle /cockpit {
+        redir * /cockpit/ 308
+    }
+
+    handle /cockpit/static/* {
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    handle /cockpit/login {
+        uri replace /cockpit/login /login
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    handle /cockpit/logout {
+        uri replace /cockpit/logout /logout
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    handle /cockpit/socket {
+        uri replace /cockpit/socket /socket
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    handle /cockpit/channel/* {
+        uri strip_prefix /cockpit
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    handle_path /cockpit/* {
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
     handle {
         reverse_proxy lify-frontend:80
     }
@@ -75,6 +131,62 @@ wnwest.com, www.wnwest.com {
 life.wnwest.com {
     handle /api/* {
         reverse_proxy lify:5000
+    }
+
+    handle /cockpit {
+        redir * /cockpit/ 308
+    }
+
+    handle /cockpit/static/* {
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    handle /cockpit/login {
+        uri replace /cockpit/login /login
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    handle /cockpit/logout {
+        uri replace /cockpit/logout /logout
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    handle /cockpit/socket {
+        uri replace /cockpit/socket /socket
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    handle /cockpit/channel/* {
+        uri strip_prefix /cockpit
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    handle_path /cockpit/* {
+        reverse_proxy https://host.docker.internal:9090 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
     }
 
     handle {
