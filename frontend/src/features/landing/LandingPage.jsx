@@ -15,10 +15,11 @@ const entrypoints = [
     icon: Blocks
   },
   {
-    href: '/ai',
-    title: 'AI Gateway',
-    description: 'Keep model-backed workflows isolated behind the gateway boundary.',
-    icon: BrainCircuit
+    href: 'https://webui.westos.dev',
+    title: 'AI Workspace',
+    description: 'Open WebUI runs on its own host while the gateway stays behind the app API boundary.',
+    icon: BrainCircuit,
+    external: true
   }
 ];
 
@@ -45,15 +46,25 @@ export function LandingPage() {
       </div>
 
       <div className="landing__grid">
-        {entrypoints.map((entrypoint) => (
-          <Link className="ui-card landing__card" key={entrypoint.href} to={entrypoint.href}>
-            <div className="icon-badge">
-              <entrypoint.icon size={18} />
-            </div>
-            <h2>{entrypoint.title}</h2>
-            <p>{entrypoint.description}</p>
-          </Link>
-        ))}
+        {entrypoints.map((entrypoint) =>
+          entrypoint.external ? (
+            <a className="ui-card landing__card" href={entrypoint.href} key={entrypoint.href} rel="noreferrer">
+              <div className="icon-badge">
+                <entrypoint.icon size={18} />
+              </div>
+              <h2>{entrypoint.title}</h2>
+              <p>{entrypoint.description}</p>
+            </a>
+          ) : (
+            <Link className="ui-card landing__card" key={entrypoint.href} to={entrypoint.href}>
+              <div className="icon-badge">
+                <entrypoint.icon size={18} />
+              </div>
+              <h2>{entrypoint.title}</h2>
+              <p>{entrypoint.description}</p>
+            </Link>
+          )
+        )}
       </div>
 
       <div className="ui-card landing__footer">

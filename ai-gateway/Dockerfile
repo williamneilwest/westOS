@@ -12,4 +12,4 @@ COPY . .
 
 EXPOSE 5001
 
-CMD ["sh", "-c", "gunicorn --bind ${GUNICORN_BIND:-0.0.0.0:5001} wsgi:app"]
+CMD ["sh", "-c", "gunicorn --bind ${GUNICORN_BIND:-0.0.0.0:5001} --timeout ${GUNICORN_TIMEOUT:-180} --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-30} wsgi:app"]

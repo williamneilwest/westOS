@@ -1,11 +1,18 @@
+# =========================
+# MAIN APP
+# =========================
 westos.dev {
 
-    # AI routes
-    handle /ai/* {
+    # -------------------------
+    # AI Gateway API
+    # -------------------------
+    handle_path /api/ai/* {
         reverse_proxy ai-gateway:5001
     }
 
-    # Backend routes (define explicit prefixes)
+    # -------------------------
+    # Backend API
+    # -------------------------
     handle /flows* {
         reverse_proxy backend:5000
     }
@@ -22,8 +29,18 @@ westos.dev {
         reverse_proxy backend:5000
     }
 
-    # Everything else → frontend
+    handle /api/health {
+        reverse_proxy backend:5000
+    }
+
+    # -------------------------
+    # Frontend (React)
+    # -------------------------
     handle {
         reverse_proxy frontend:5173
     }
+}
+
+webui.westos.dev {
+    reverse_proxy open-webui:8080
 }

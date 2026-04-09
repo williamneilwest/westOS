@@ -1,5 +1,6 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { LandingPage } from '../features/landing/LandingPage';
+import { WorkInsightsPage } from '../features/work/WorkInsightsPage';
 import { AppShell } from './shell/AppShell';
 
 const routeModules = import.meta.glob('../features/*/routes.jsx');
@@ -27,37 +28,31 @@ export const router = createBrowserRouter([
       },
       {
         path: 'work',
-        element: <Navigate replace to="/csv" />
+        element: <Navigate replace to="/work" />
       }
     ]
   },
   {
-    path: '/csv',
+    path: '/work',
     Component: AppShell,
     children: [
       {
         index: true,
         lazy: routeModules['../features/work/routes.jsx']
+      },
+      {
+        path: 'insights',
+        Component: WorkInsightsPage
       }
     ]
   },
   {
-    path: '/ai',
-    Component: AppShell,
-    children: [
-      {
-        index: true,
-        lazy: routeModules['../features/ai/routes.jsx']
-      }
-    ]
+    path: '/csv',
+    element: <Navigate replace to="/work" />
   },
   {
     path: '/life',
     element: <Navigate replace to="/app/life" />
-  },
-  {
-    path: '/work',
-    element: <Navigate replace to="/csv" />
   },
   {
     path: '/console',

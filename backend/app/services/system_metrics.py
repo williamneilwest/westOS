@@ -42,7 +42,7 @@ def _probe_frontend(url):
 
 def build_system_status():
     environment = os.getenv('FLASK_ENV', 'production')
-    ai_url = os.getenv('AI_GATEWAY_STATUS_URL', 'http://ai-gateway:5001/ai/health')
+    ai_url = os.getenv('AI_GATEWAY_STATUS_URL', 'http://ai-gateway:5001/api/ai/health')
     frontend_url = os.getenv('FRONTEND_STATUS_URL', 'http://frontend:5173')
 
     backend_probe = {

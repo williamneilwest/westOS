@@ -12,8 +12,8 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 const modules = [
   { href: '/app/life', label: 'Life', summary: 'Personal systems', icon: HeartPulse },
-  { href: '/csv', label: 'CSV', summary: 'Operational file tools', icon: Blocks },
-  { href: '/ai', label: 'AI', summary: 'Gateway and automation', icon: BrainCircuit },
+  { href: '/work', label: 'Work', summary: 'Operational file tools', icon: Blocks },
+  { href: 'https://webui.westos.dev', label: 'AI', summary: 'Open WebUI workspace', icon: BrainCircuit, external: true },
   { href: '/app/console', label: 'Console', summary: 'Service status', icon: TerminalSquare }
 ];
 
@@ -36,23 +36,35 @@ export function AppShell() {
         </div>
 
         <nav className="shell__nav" aria-label="Primary">
-          {modules.map((module) => (
-            <NavLink
-              key={module.href}
-              to={module.href}
-              className={({ isActive }) =>
-                isActive ? 'shell__nav-link shell__nav-link--active' : 'shell__nav-link'
-              }
-            >
-              <span className="shell__nav-icon">
-                <module.icon size={18} />
-              </span>
-              <span className="shell__nav-copy">
-                <strong>{module.label}</strong>
-                <span>{module.summary}</span>
-              </span>
-            </NavLink>
-          ))}
+          {modules.map((module) =>
+            module.external ? (
+              <a className="shell__nav-link" href={module.href} key={module.href} rel="noreferrer">
+                <span className="shell__nav-icon">
+                  <module.icon size={18} />
+                </span>
+                <span className="shell__nav-copy">
+                  <strong>{module.label}</strong>
+                  <span>{module.summary}</span>
+                </span>
+              </a>
+            ) : (
+              <NavLink
+                key={module.href}
+                to={module.href}
+                className={({ isActive }) =>
+                  isActive ? 'shell__nav-link shell__nav-link--active' : 'shell__nav-link'
+                }
+              >
+                <span className="shell__nav-icon">
+                  <module.icon size={18} />
+                </span>
+                <span className="shell__nav-copy">
+                  <strong>{module.label}</strong>
+                  <span>{module.summary}</span>
+                </span>
+              </NavLink>
+            )
+          )}
         </nav>
 
         <div className="shell__sidebar-footer">
@@ -85,7 +97,7 @@ export function AppShell() {
             </a>
             <a
               className="ui-button ui-button--secondary shell__link-button"
-              href="/ai/health"
+              href="/api/ai/health"
               rel="noreferrer"
               target="_blank"
             >
@@ -93,6 +105,32 @@ export function AppShell() {
               <ArrowUpRight size={15} />
             </a>
           </div>
+
+          <nav className="shell__mobile-nav" aria-label="Primary">
+            {modules.map((module) =>
+              module.external ? (
+                <a className="shell__mobile-nav-link" href={module.href} key={module.href} rel="noreferrer">
+                  <span className="shell__mobile-nav-icon">
+                    <module.icon size={16} />
+                  </span>
+                  <span>{module.label}</span>
+                </a>
+              ) : (
+                <NavLink
+                  key={module.href}
+                  to={module.href}
+                  className={({ isActive }) =>
+                    isActive ? 'shell__mobile-nav-link shell__mobile-nav-link--active' : 'shell__mobile-nav-link'
+                  }
+                >
+                  <span className="shell__mobile-nav-icon">
+                    <module.icon size={16} />
+                  </span>
+                  <span>{module.label}</span>
+                </NavLink>
+              )
+            )}
+          </nav>
         </header>
 
         <div className="shell__viewport">

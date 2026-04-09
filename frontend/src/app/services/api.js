@@ -43,11 +43,11 @@ export function getRecentCsvAnalyses() {
 }
 
 export function getAiHealth() {
-  return request(aiBaseUrl, '/ai/health');
+  return request(aiBaseUrl, '/api/ai/health');
 }
 
 export function sendAiChat(message) {
-  return request(aiBaseUrl, '/ai/chat', {
+  return request(aiBaseUrl, '/api/ai/chat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
