@@ -1,0 +1,62 @@
+services:
+  frontend:
+    build:
+      context: ./services/frontend
+    container_name: frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://westos.dev}
+      VITE_AI_BASE_URL: ${VITE_AI_BASE_URL:-https://westos.dev}
+    expose:
+      - "5173"
+    networks:
+      - westos
+
+  backend:
+    build:
+      context: ./services/backend
+    container_name: backend
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: ${BACKEND_FLASK_ENV:-production}
+      GUNICORN_BIND: ${BACKEND_GUNICORN_BIND:-0.0.0.0:5000}
+      APP_NAME: ${BACKEND_APP_NAME:-westOS API}
+    expose:
+      - "5000"
+    networks:
+      - westos
+
+  ai-gateway:
+    build:
+      context: ./services/ai-gateway
+    container_name: ai-gateway
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: ${AI_FLASK_ENV:-production}
+      GUNICORN_BIND: ${AI_GUNICORN_BIND:-0.0.0.0:5001}
+      APP_NAME: ${AI_APP_NAME:-westOS AI Gateway}
+    expose:
+      - "5001"
+    networks:
+      - westos
+
+  caddy:
+    image: caddy:2.8.4
+    container_name: caddy
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+      - ai-gateway
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/data:/data
+      - ./caddy/config:/config
+    networks:
+      - westos
+networks:
+  westos:
+    external: true
