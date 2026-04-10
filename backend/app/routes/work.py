@@ -1,6 +1,7 @@
 from flask import Blueprint, Response, request
 
 from ..api_response import error_response, success_response
+from ..services.active_tickets import cache_active_ticket_dataset, get_ticket_by_id
 from ..services.analysis_store import get_analysis_file, list_recent_analyses, save_analysis
 from ..services.csv_analyzer import build_csv_analysis
 
@@ -40,6 +41,7 @@ def analyze_csv():
 
         content = uploaded_file.stream.read()
         result = build_csv_analysis(uploaded_file.filename, content)
+        cache_active_ticket_dataset(content)
         record = save_analysis(uploaded_file.filename, content, result)
 
         return success_response(
@@ -51,3 +53,16 @@ def analyze_csv():
         )
     except ValueError as error:
         return error_response(str(error), 400)
+
+
+@work_bp.get('/api/tickets/<ticket_id>')
+def get_ticket(ticket_id):
+    try:
+        ticket = get_ticket_by_id(ticket_id)
+    except ValueError as error:
+        return error_response(str(error), 400)
+
+    if not ticket:
+        return error_response(f'Ticket {ticket_id} was not found.', 404)
+
+    return success_response(ticket)

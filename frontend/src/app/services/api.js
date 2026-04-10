@@ -65,6 +65,10 @@ export function getRecentCsvAnalysisFile(analysisId) {
   return requestText(backendBaseUrl, `/flows/work/recent-analyses/${analysisId}/file`);
 }
 
+export function getTicket(ticketId) {
+  return request(backendBaseUrl, `/api/tickets/${encodeURIComponent(ticketId)}`);
+}
+
 export function getAiHealth() {
   return request(aiBaseUrl, '/api/ai/health');
 }

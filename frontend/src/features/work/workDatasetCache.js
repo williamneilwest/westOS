@@ -1,5 +1,8 @@
 const STORAGE_KEY = 'westos.work.fullDataset';
 const SUMMARY_STORAGE_KEY = 'westos.work.aiMetricSummaries';
+const HEADER_MAPPING = {
+  u_task_1: 'Ticket',
+};
 
 function normalizeHeader(fieldname) {
   let value = String(fieldname ?? '').trim().toLowerCase();
@@ -16,7 +19,7 @@ function normalizeHeader(fieldname) {
 }
 
 function normalizeHeaders(fieldnames = []) {
-  return fieldnames.map((fieldname) => normalizeHeader(fieldname));
+  return fieldnames.map((fieldname) => HEADER_MAPPING[normalizeHeader(fieldname)] || normalizeHeader(fieldname));
 }
 
 function parseCsvRows(text) {

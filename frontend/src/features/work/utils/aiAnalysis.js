@@ -12,11 +12,9 @@ const DATE_PATTERN =
 const AUTHOR_PATTERN = /\b(?:by|author|user|updated by)\s*[:\-]?\s*([a-z][a-z .,'_-]{1,60})/i;
 const AI_SECTION_KEYS = {
   summary: 'summary',
-  'root cause': 'rootCause',
-  'work performed': 'workPerformed',
-  blocker: 'blocker',
-  'next step': 'nextStep',
-  'stalled status': 'stalledStatus',
+  'work notes': 'workNotes',
+  comments: 'comments',
+  status: 'status',
 };
 
 function normalizeValue(value) {
@@ -240,37 +238,95 @@ export function getTicketLastUpdatedLabel(ticket, columns = Object.keys(ticket |
   return info.updatedAt.toLocaleString();
 }
 
-export function build_prompt(ticket, days_since, last_author, last_type) {
+function buildTicketSummaryPayload(ticket) {
   const columns = Object.keys(ticket || {});
   const fieldMap = getTicketColumns(columns);
   const notes = getTicketNotes(ticket, columns);
-  const metadataLines = columns
+  const metadataEntries = columns
     .filter((column) => !fieldMap.noteColumns.includes(column) && !isSuppressedTicketColumn(column))
-    .map((column) => `${formatLabel(column)}: ${normalizeValue(ticket?.[column]) || 'Unknown'}`);
+    .map((column) => [formatLabel(column), normalizeValue(ticket?.[column])])
+    .filter(([, value]) => value);
+
+  const workNotes = notes
+    .filter((note) => /work/i.test(note.type))
+    .slice(0, 5)
+    .map((note) => ({
+      author: note.author || undefined,
+      timestamp: note.timestamp ? note.timestamp.toISOString() : undefined,
+      content: truncateNoteContent(note.value, 220),
+    }));
+
+  const comments = notes
+    .filter((note) => !/work/i.test(note.type))
+    .slice(0, 5)
+    .map((note) => ({
+      author: note.author || undefined,
+      timestamp: note.timestamp ? note.timestamp.toISOString() : undefined,
+      content: truncateNoteContent(note.value, 220),
+    }));
+
+  return Object.fromEntries(
+    [
+      ['ticket', getTicketId(ticket, columns)],
+      ['title', getTicketTitle(ticket, columns)],
+      ['assigned_to', getTicketAssignee(ticket, columns)],
+      ['status', getTicketStatus(ticket, columns)],
+      ...metadataEntries,
+      ['work_notes', workNotes],
+      ['comments', comments],
+    ].filter(([, value]) => {
+      if (Array.isArray(value)) {
+        return value.length > 0;
+      }
+
+      return Boolean(value);
+    })
+  );
+}
+
+export function build_prompt(ticket, days_since, last_author, last_type) {
+  const ticketPayload = buildTicketSummaryPayload(ticket);
 
   return [
-    'Summarize in 2 sentences:',
-    `Ticket ID: ${getTicketId(ticket, columns)}`,
-    `Title: ${getTicketTitle(ticket, columns)}`,
-    `Assigned to: ${getTicketAssignee(ticket, columns)}`,
-    `Status: ${getTicketStatus(ticket, columns)}`,
-    `Days since last update: ${days_since ?? 'Unknown'}`,
-    `Last update author: ${last_author || 'Unknown'}`,
-    `Last update type: ${last_type || 'Unknown'}`,
-    ...metadataLines.slice(0, 4),
-    'Last 3 notes:',
-    compress_notes(notes, 3) || 'No notes available.',
+    'You are a strict data summarizer.',
+    '',
+    'Rules:',
+    '- Only summarize what is explicitly present',
+    '- Do NOT infer, guess, or speculate',
+    '- Do NOT provide recommendations or next steps',
+    '- Do NOT diagnose issues',
+    '- Keep output concise and structured',
+    '- Prioritize speed and clarity over detail',
+    '',
+    'Summarize the following ticket data.',
+    '',
+    'Return ONLY the following sections:',
+    '',
+    'Summary:',
+    '- 1-2 sentences describing the issue',
+    '',
+    'Work Notes:',
+    '- Bullet list of key actions performed',
+    '',
+    'Comments:',
+    '- Bullet list of important user or technician comments',
+    '',
+    'Status:',
+    '- Current state based strictly on the latest entry',
+    '',
+    'Keep everything short, factual, and clean.',
+    '',
+    'DATA:',
+    JSON.stringify(ticketPayload, null, 2),
   ].join('\n');
 }
 
 export function parseTicketAiAnalysis(result) {
   const template = {
     summary: '',
-    rootCause: '',
-    workPerformed: '',
-    blocker: '',
-    nextStep: '',
-    stalledStatus: '',
+    workNotes: [],
+    comments: [],
+    status: '',
   };
 
   const lines = normalizeValue(result)
@@ -294,13 +350,22 @@ export function parseTicketAiAnalysis(result) {
       const maybeSection = AI_SECTION_KEYS[sectionMatch[1].trim().toLowerCase()];
       if (maybeSection) {
         currentSection = maybeSection;
-        template[currentSection] = sectionMatch[2].trim();
+        if (currentSection === 'workNotes' || currentSection === 'comments') {
+          template[currentSection].push(sectionMatch[2].trim());
+        } else {
+          template[currentSection] = sectionMatch[2].trim();
+        }
         continue;
       }
     }
 
     const content = line.replace(/^[-*]\s*/, '').trim();
     if (!content) {
+      continue;
+    }
+
+    if (currentSection === 'workNotes' || currentSection === 'comments') {
+      template[currentSection].push(content);
       continue;
     }
 

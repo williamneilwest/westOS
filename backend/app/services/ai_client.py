@@ -1,7 +1,27 @@
+import logging
+import re
+from time import perf_counter
+
 import requests
 
 
 DEFAULT_TIMEOUT_SECONDS = 120
+MAX_PROMPT_CHARS = 12000
+ACK_PATTERNS = [
+    r'thank you for contacting.*?(?=\n|$)',
+    r'your ticket has been received.*?(?=\n|$)',
+    r'we will be in contact with you.*?(?=\n|$)',
+    r'feel free to check.*?(?=\n|$)',
+    r'thank you for taking the time.*?(?=\n|$)',
+    r'ticket has been prioritized.*?(?=\n|$)',
+    r'https?://\S+',
+    r'help desk acknowledged ticket',
+    r'acknowledged ticket with template',
+    r'andi acknowledged ticket.*?(?=\n|$)',
+]
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def extract_message_content(message):
@@ -20,11 +40,77 @@ def extract_message_content(message):
     return ''
 
 
+def clean_ticket_text(text):
+    if not text:
+        return ''
+
+    cleaned = str(text)
+
+    for pattern in ACK_PATTERNS:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+
+    filtered_lines = []
+    for raw_line in cleaned.splitlines():
+        line = re.sub(r'\s+', ' ', raw_line).strip()
+        if not line:
+            continue
+
+        word_count = len(line.split())
+        if word_count < 15 and 'thank you' in line.lower():
+            continue
+
+        filtered_lines.append(line)
+
+    cleaned = '\n'.join(filtered_lines)
+    cleaned = re.sub(r'\n\s*\n+', '\n', cleaned)
+    cleaned = cleaned.strip()
+
+    return cleaned
+
+
+def clean_message_content(content):
+    if isinstance(content, str):
+        return clean_ticket_text(content)
+
+    if isinstance(content, list):
+        cleaned_content = []
+        for item in content:
+            if not isinstance(item, dict):
+                cleaned_content.append(item)
+                continue
+
+            if item.get('type') != 'text':
+                cleaned_content.append(item)
+                continue
+
+            cleaned_text = clean_ticket_text(item.get('text', ''))
+            if cleaned_text:
+                cleaned_content.append({**item, 'text': cleaned_text})
+
+        return cleaned_content
+
+    return content
+
+
 def normalize_messages(payload):
     if isinstance(payload.get('messages'), list) and payload['messages']:
-        return payload['messages']
+        cleaned_messages = []
+        for message in payload['messages']:
+            if not isinstance(message, dict):
+                continue
 
-    prompt = str(payload.get('message', '')).strip()
+            cleaned_content = clean_message_content(message.get('content', ''))
+            if not extract_message_content({'content': cleaned_content}).strip():
+                continue
+
+            cleaned_messages.append({**message, 'content': cleaned_content})
+
+        if not cleaned_messages:
+            raise ValueError('A prompt is required.')
+
+        return cleaned_messages
+
+    prompt = clean_ticket_text(payload.get('message', ''))
     if not prompt:
         raise ValueError('A prompt is required.')
 
@@ -49,13 +135,33 @@ def build_prompt(payload):
     if not prompt:
         raise ValueError('A prompt is required.')
 
+    if len(prompt) > MAX_PROMPT_CHARS:
+        prompt = prompt[:MAX_PROMPT_CHARS].rstrip()
+
     return prompt
 
 
+def sanitize_payload(payload):
+    if not isinstance(payload, dict):
+        return {}
+
+    sanitized = dict(payload)
+
+    if isinstance(payload.get('messages'), list):
+        sanitized['messages'] = normalize_messages(payload)
+        return sanitized
+
+    if 'message' in payload:
+        sanitized['message'] = clean_ticket_text(payload.get('message', ''))
+
+    return sanitized
+
+
 def call_gateway_chat(payload, gateway_base_url):
+    sanitized_payload = sanitize_payload(payload)
     response = requests.post(
         f"{gateway_base_url.rstrip('/')}/api/ai/chat",
-        json=payload,
+        json=sanitized_payload,
         timeout=DEFAULT_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
@@ -63,9 +169,10 @@ def call_gateway_chat(payload, gateway_base_url):
 
 
 def call_gateway_openai_chat(payload, gateway_base_url):
+    sanitized_payload = sanitize_payload(payload)
     response = requests.post(
         f"{gateway_base_url.rstrip('/')}/api/ai/v1/chat/completions",
-        json=payload,
+        json=sanitized_payload,
         timeout=DEFAULT_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
@@ -74,17 +181,32 @@ def call_gateway_openai_chat(payload, gateway_base_url):
 
 def call_ollama_generate(payload, ollama_api_base, ollama_model):
     prompt = build_prompt(payload)
+    request_payload = {
+        'model': ollama_model,
+        'prompt': prompt,
+        'stream': False,
+        'options': {
+            'temperature': 0,
+            'top_p': 0.1,
+            'repeat_penalty': 1.0,
+            'num_predict': 200,
+        },
+    }
+    started_at = perf_counter()
     response = requests.post(
         f"{ollama_api_base.rstrip('/')}/api/generate",
-        json={
-            'model': ollama_model,
-            'prompt': prompt,
-            'stream': False,
-        },
+        json=request_payload,
         timeout=DEFAULT_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
-    return response.json()
+    result = response.json()
+    duration = perf_counter() - started_at
+
+    LOGGER.info('Ollama request finished in %.2fs', duration)
+    if duration > 5:
+        LOGGER.warning('Ollama request exceeded 5 seconds: %.2fs', duration)
+
+    return result
 
 
 def build_compat_chat_response(payload, result):

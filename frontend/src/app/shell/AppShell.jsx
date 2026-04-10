@@ -4,22 +4,36 @@ import {
   Blocks,
   BrainCircuit,
   HeartPulse,
+  Info,
   LayoutDashboard,
+  LibraryBig,
   Sparkles,
   TerminalSquare
 } from 'lucide-react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 
 const modules = [
-  { href: '/app/life', label: 'Life', summary: 'Personal systems', icon: HeartPulse },
-  { href: '/work', label: 'Work', summary: 'Operational file tools', icon: Blocks },
-  { href: 'https://webui.westos.dev', label: 'AI', summary: 'Open WebUI workspace', icon: BrainCircuit, external: true },
-  { href: '/app/console', label: 'Console', summary: 'Service status', icon: TerminalSquare }
+  { href: '/app/life', label: 'Life', summary: 'Personal systems', icon: HeartPulse, readmeHref: '/readme#life' },
+  { href: '/work', label: 'Work', summary: 'Operational file tools', icon: Blocks, readmeHref: '/readme#work' },
+  { href: 'https://webui.westos.dev', label: 'AI', summary: 'Open WebUI workspace', icon: BrainCircuit, external: true, readmeHref: '/readme#ai' },
+  { href: '/app/console', label: 'Console', summary: 'Service status', icon: TerminalSquare, readmeHref: '/readme#console' }
 ];
+
+const docsModule = {
+  href: '/readme',
+  label: 'Readme',
+  summary: 'Project encyclopedia',
+  icon: LibraryBig,
+  readmeHref: '/readme'
+};
 
 export function AppShell() {
   const location = useLocation();
-  const activeModule = modules.find((module) => location.pathname.startsWith(module.href)) || modules[0];
+  const shellPath = location.pathname.startsWith('/tickets') ? '/work' : location.pathname;
+  const activeModule =
+    (shellPath.startsWith('/readme') && docsModule) ||
+    modules.find((module) => !module.external && shellPath.startsWith(module.href)) ||
+    modules[0];
 
   return (
     <div className="shell">
@@ -38,31 +52,40 @@ export function AppShell() {
         <nav className="shell__nav" aria-label="Primary">
           {modules.map((module) =>
             module.external ? (
-              <a className="shell__nav-link" href={module.href} key={module.href} rel="noreferrer">
-                <span className="shell__nav-icon">
-                  <module.icon size={18} />
-                </span>
-                <span className="shell__nav-copy">
-                  <strong>{module.label}</strong>
-                  <span>{module.summary}</span>
-                </span>
-              </a>
+              <div className="shell__nav-row" key={module.href}>
+                <a className="shell__nav-link" href={module.href} rel="noreferrer">
+                  <span className="shell__nav-icon">
+                    <module.icon size={18} />
+                  </span>
+                  <span className="shell__nav-copy">
+                    <strong>{module.label}</strong>
+                    <span>{module.summary}</span>
+                  </span>
+                </a>
+                <Link aria-label={`${module.label} info`} className="shell__info-link" to={module.readmeHref}>
+                  <Info size={15} />
+                </Link>
+              </div>
             ) : (
-              <NavLink
-                key={module.href}
-                to={module.href}
-                className={({ isActive }) =>
-                  isActive ? 'shell__nav-link shell__nav-link--active' : 'shell__nav-link'
-                }
-              >
-                <span className="shell__nav-icon">
-                  <module.icon size={18} />
-                </span>
-                <span className="shell__nav-copy">
-                  <strong>{module.label}</strong>
-                  <span>{module.summary}</span>
-                </span>
-              </NavLink>
+              <div className="shell__nav-row" key={module.href}>
+                <NavLink
+                  to={module.href}
+                  className={({ isActive }) =>
+                    isActive ? 'shell__nav-link shell__nav-link--active' : 'shell__nav-link'
+                  }
+                >
+                  <span className="shell__nav-icon">
+                    <module.icon size={18} />
+                  </span>
+                  <span className="shell__nav-copy">
+                    <strong>{module.label}</strong>
+                    <span>{module.summary}</span>
+                  </span>
+                </NavLink>
+                <Link aria-label={`${module.label} info`} className="shell__info-link" to={module.readmeHref}>
+                  <Info size={15} />
+                </Link>
+              </div>
             )
           )}
         </nav>
@@ -86,6 +109,10 @@ export function AppShell() {
           </div>
 
           <div className="shell__topbar-actions">
+            <Link className="ui-button ui-button--secondary shell__link-button" to={activeModule.readmeHref}>
+              <Info size={15} />
+              Info
+            </Link>
             <a
               className="ui-button ui-button--secondary shell__link-button"
               href="/health"
@@ -101,7 +128,7 @@ export function AppShell() {
               rel="noreferrer"
               target="_blank"
             >
-              AI Gateway
+              AI Status
               <ArrowUpRight size={15} />
             </a>
           </div>

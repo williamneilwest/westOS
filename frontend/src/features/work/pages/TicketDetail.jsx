@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Clock3, MessageSquareText, Sparkles, UserRound } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { sendAiChat } from '../../../app/services/api';
+import { getTicket, sendAiChat } from '../../../app/services/api';
 import { Card, CardHeader } from '../../../app/ui/Card';
 import { EmptyState } from '../../../app/ui/EmptyState';
 import { getCachedWorkDataset, setCachedWorkDataset } from '../workDatasetCache';
@@ -16,7 +16,6 @@ import {
   getTicketTitle,
   getTicketColumns,
   isSuppressedTicketColumn,
-  get_last_update_info,
   parseTicketAiAnalysis,
   updateTicketAnalysis,
 } from '../utils/aiAnalysis';
@@ -41,6 +40,7 @@ export function TicketDetail() {
   const [analysisResult, setAnalysisResult] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isLoadingTicket, setIsLoadingTicket] = useState(false);
 
   const ticket = useMemo(() => findTicketById(dataset, decodedTicketId), [dataset, decodedTicketId]);
   const columns = dataset?.columns || [];
@@ -55,6 +55,51 @@ export function TicketDetail() {
     setAnalysisResult(ticket?.ai_analysis?.result || '');
   }, [ticket?.ai_analysis?.result]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTicket() {
+      if (ticket) {
+        return;
+      }
+
+      setIsLoadingTicket(true);
+      setError('');
+
+      try {
+        const result = await getTicket(decodedTicketId);
+
+        if (!isMounted) {
+          return;
+        }
+
+        const nextDataset = {
+          columns: Object.keys(result.data || {}),
+          rows: result.data ? [result.data] : [],
+        };
+
+        setCachedWorkDataset(nextDataset);
+        setDataset(nextDataset);
+      } catch (requestError) {
+        if (!isMounted) {
+          return;
+        }
+
+        setError(requestError.message || 'Ticket could not be loaded.');
+      } finally {
+        if (isMounted) {
+          setIsLoadingTicket(false);
+        }
+      }
+    }
+
+    void loadTicket();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [decodedTicketId, ticket]);
+
   async function runAnalysis() {
     if (!ticket) {
       return;
@@ -65,8 +110,7 @@ export function TicketDetail() {
     const startedAt = performance.now();
 
     try {
-      const { days_since, last_author, last_type } = get_last_update_info(ticket, columns);
-      const prompt = build_prompt(ticket, days_since, last_author, last_type);
+      const prompt = build_prompt(ticket);
       const result = await sendAiChat(prompt);
       const message = result.message || '';
       const durationSeconds = Number(((performance.now() - startedAt) / 1000).toFixed(2));
@@ -88,6 +132,20 @@ export function TicketDetail() {
     }
   }
 
+  if (isLoadingTicket) {
+    return (
+      <section className="module">
+        <Card className="module__empty-card">
+          <EmptyState
+            icon={<MessageSquareText size={20} />}
+            title="Loading ticket"
+            description="Retrieving ticket data from the backend."
+          />
+        </Card>
+      </section>
+    );
+  }
+
   if (!dataset?.rows?.length) {
     return (
       <section className="module">
@@ -95,7 +153,7 @@ export function TicketDetail() {
           <EmptyState
             icon={<MessageSquareText size={20} />}
             title="No ticket dataset loaded"
-            description="Upload or reopen a CSV from the Work page before opening a ticket detail view."
+            description={error || 'Upload or reopen a CSV from the Work page before opening a ticket detail view.'}
           />
         </Card>
       </section>
@@ -109,7 +167,7 @@ export function TicketDetail() {
           <EmptyState
             icon={<MessageSquareText size={20} />}
             title="Ticket not found"
-            description="The selected ticket is not present in the currently cached dataset."
+            description={error || 'The selected ticket is not present in the currently cached dataset.'}
           />
         </Card>
       </section>
@@ -125,10 +183,68 @@ export function TicketDetail() {
         </Link>
       </div>
 
+      {(loading || analysisResult || error) ? (
+        <Card className="ticket-summary-popup">
+          <CardHeader eyebrow="AI Summary" title="Ticket summary" />
+          {loading ? <p className="status-text">Loading analysis...</p> : null}
+          {error ? <p className="status-text status-text--error">{error}</p> : null}
+          {!loading && analysisResult ? (
+            <div className="ticket-summary-popup__content">
+              <div className="ticket-summary-popup__section">
+                <span>Summary</span>
+                <p>{parsedAnalysis.summary || 'No summary returned.'}</p>
+              </div>
+              <div className="ticket-summary-popup__section">
+                <span>Work Notes</span>
+                {parsedAnalysis.workNotes.length ? (
+                  <ul>
+                    {parsedAnalysis.workNotes.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No work notes returned.</p>
+                )}
+              </div>
+              <div className="ticket-summary-popup__section">
+                <span>Comments</span>
+                {parsedAnalysis.comments.length ? (
+                  <ul>
+                    {parsedAnalysis.comments.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No comments returned.</p>
+                )}
+              </div>
+              <div className="ticket-summary-popup__section">
+                <span>Status</span>
+                <p>{parsedAnalysis.status || 'No status returned.'}</p>
+              </div>
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+
       <section className="ticket-detail-layout">
         <div className="ticket-detail-main">
           <Card className="ticket-detail-card">
-            <CardHeader eyebrow="Ticket Detail" title={getTicketId(ticket, columns)} description={getTicketTitle(ticket, columns)} />
+            <CardHeader
+              eyebrow="Ticket Detail"
+              title={getTicketId(ticket, columns)}
+              description={getTicketTitle(ticket, columns)}
+              action={
+                <button className="ui-button ui-button--primary" disabled={loading} onClick={runAnalysis} type="button">
+                  <Sparkles size={16} />
+                  {loading
+                    ? 'Analyzing...'
+                    : ticket?.ai_analysis?.result
+                      ? 'Re-run Summary'
+                      : 'Generate Summary'}
+                </button>
+              }
+            />
 
             <div className="ticket-detail-hero">
               <div className="ticket-detail-hero__item">
@@ -152,69 +268,6 @@ export function TicketDetail() {
                 </div>
               ))}
             </div>
-          </Card>
-
-          <Card className="ticket-detail-card ticket-analysis-card">
-            <CardHeader
-              eyebrow="AI Analysis"
-              title="Ticket review"
-              description="Run a targeted analysis for this ticket using the existing AI gateway."
-              action={
-                <button className="ui-button ui-button--primary" disabled={loading} onClick={runAnalysis} type="button">
-                  <Sparkles size={16} />
-                  {loading
-                    ? 'Analyzing...'
-                    : ticket?.ai_analysis?.result
-                      ? 'Re-run Analysis'
-                      : 'Analyze with AI'}
-                </button>
-              }
-            />
-
-            {error ? <p className="status-text status-text--error">{error}</p> : null}
-            {loading ? <p className="status-text">Analyzing ticket...</p> : null}
-
-            {analysisResult ? (
-              <div className="ticket-analysis-grid">
-                <div className="ticket-analysis-grid__item ticket-analysis-grid__item--wide">
-                  <span>Summary</span>
-                  <p>{parsedAnalysis.summary || 'No summary returned.'}</p>
-                </div>
-                <div className="ticket-analysis-grid__item">
-                  <span>Root cause</span>
-                  <p>{parsedAnalysis.rootCause || 'No root cause identified.'}</p>
-                </div>
-                <div className="ticket-analysis-grid__item">
-                  <span>Work performed</span>
-                  <p>{parsedAnalysis.workPerformed || 'No work performed listed.'}</p>
-                </div>
-                <div className="ticket-analysis-grid__item">
-                  <span>Blocker</span>
-                  <p>{parsedAnalysis.blocker || 'No blocker identified.'}</p>
-                </div>
-                <div className="ticket-analysis-grid__item">
-                  <span>Next step</span>
-                  <p>{parsedAnalysis.nextStep || 'No next step provided.'}</p>
-                </div>
-                <div className="ticket-analysis-grid__item">
-                  <span>Stalled status</span>
-                  <p>{parsedAnalysis.stalledStatus || 'No stalled status provided.'}</p>
-                </div>
-                <div className="ticket-analysis-grid__item ticket-analysis-grid__item--wide">
-                  <span>Analysis metadata</span>
-                  <p>
-                    Version {ticket.ai_analysis.version} · {ticket.ai_analysis.duration_seconds}s ·{' '}
-                    {new Date(ticket.ai_analysis.analyzed_at).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <EmptyState
-                icon={<Sparkles size={20} />}
-                title="No AI analysis yet"
-                description="Run analysis manually when you want an AI review for this ticket."
-              />
-            )}
           </Card>
         </div>
 

@@ -23,7 +23,9 @@ import { SectionHeader } from '../../app/ui/SectionHeader';
 import { TicketCard } from './components/TicketCard';
 import { getCachedWorkDataset, parseCsvText, setCachedWorkDataset } from './workDatasetCache';
 import { buildInsights, buildInsightsSummaryPrompt } from './workInsightsMetrics';
-import { dedupeNotes, getTicketColumns, getTicketId, isActiveTicket, isSuppressedTicketColumn } from './utils/aiAnalysis';
+import { dedupeNotes, getTicketAssignee, getTicketColumns, getTicketId, isActiveTicket, isSuppressedTicketColumn } from './utils/aiAnalysis';
+
+const DEFAULT_CARD_ASSIGNEE = 'William West';
 
 function inferColumnType(rows, column) {
   const values = rows
@@ -615,7 +617,14 @@ export function WorkPage() {
     return null;
   }, [analysis]);
   const activeTickets = useMemo(
-    () => ticketDataset?.rows?.filter((row) => isActiveTicket(row, ticketDataset.columns)) || [],
+    () =>
+      ticketDataset?.rows?.filter((row) => {
+        if (!isActiveTicket(row, ticketDataset.columns)) {
+          return false;
+        }
+
+        return getTicketAssignee(row, ticketDataset.columns).trim().toLowerCase() === DEFAULT_CARD_ASSIGNEE.toLowerCase();
+      }) || [],
     [ticketDataset]
   );
 
@@ -1051,8 +1060,8 @@ export function WorkPage() {
                 ) : (
                   <EmptyState
                     icon={<FileSpreadsheet size={20} />}
-                    title="No active tickets found"
-                    description="The loaded dataset does not contain any records where active=true."
+                    title="No assigned active tickets found"
+                    description={`The loaded dataset does not contain any active tickets assigned to ${DEFAULT_CARD_ASSIGNEE}.`}
                   />
                 )
               ) : (

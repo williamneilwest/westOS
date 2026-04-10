@@ -1,5 +1,6 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { LandingPage } from '../features/landing/LandingPage';
+import { ReadmePage } from '../features/readme/ReadmePage';
 import { TicketDetail } from '../features/work/pages/TicketDetail';
 import { WorkInsightsPage } from '../features/work/WorkInsightsPage';
 import { AppShell } from './shell/AppShell';
@@ -44,6 +45,16 @@ export const router = createBrowserRouter([
       {
         path: 'insights',
         Component: WorkInsightsPage
+      }
+    ]
+  },
+  {
+    path: '/readme',
+    Component: AppShell,
+    children: [
+      {
+        index: true,
+        Component: ReadmePage
       }
     ]
   },
