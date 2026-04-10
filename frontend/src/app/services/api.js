@@ -69,6 +69,23 @@ export function getTicket(ticketId) {
   return request(backendBaseUrl, `/api/tickets/${encodeURIComponent(ticketId)}`);
 }
 
+export function getLatestTickets() {
+  return request(backendBaseUrl, '/api/tickets/latest');
+}
+
+export function updateTicketAssignee(ticketId, assignee) {
+  return request(backendBaseUrl, '/api/tickets/update-assignee', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      ticket_id: ticketId,
+      assignee,
+    })
+  });
+}
+
 export function getAiHealth() {
   return request(aiBaseUrl, '/api/ai/health');
 }

@@ -1,27 +1,18 @@
-# =========================
-# MAIN APP
-# =========================
 westos.dev {
 
-    # -------------------------
-    # AI API
-    # -------------------------
-    handle_path /api/ai/* {
+    handle /api/* {
         reverse_proxy backend:5000
     }
 
-    # -------------------------
-    # Backend API
-    # -------------------------
-    handle /flows* {
+    handle /flows/* {
         reverse_proxy backend:5000
     }
 
-    handle /plaid* {
+    handle /plaid/* {
         reverse_proxy backend:5000
     }
 
-    handle /auth* {
+    handle /auth/* {
         reverse_proxy backend:5000
     }
 
@@ -29,18 +20,7 @@ westos.dev {
         reverse_proxy backend:5000
     }
 
-    handle /api/health {
-        reverse_proxy backend:5000
-    }
-
-    # -------------------------
-    # Frontend (React)
-    # -------------------------
     handle {
         reverse_proxy frontend:5173
     }
-}
-
-webui.westos.dev {
-    reverse_proxy open-webui:8080
 }

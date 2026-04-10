@@ -16,7 +16,14 @@ import {
   X,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { analyzeCsvFile, getRecentCsvAnalyses, getRecentCsvAnalysisFile, sendAiChat } from '../../app/services/api';
+import {
+  analyzeCsvFile,
+  getLatestTickets,
+  getRecentCsvAnalyses,
+  getRecentCsvAnalysisFile,
+  sendAiChat,
+  updateTicketAssignee,
+} from '../../app/services/api';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { SectionHeader } from '../../app/ui/SectionHeader';
@@ -26,6 +33,7 @@ import { buildInsights, buildInsightsSummaryPrompt } from './workInsightsMetrics
 import { dedupeNotes, getTicketAssignee, getTicketColumns, getTicketId, isActiveTicket, isSuppressedTicketColumn } from './utils/aiAnalysis';
 
 const DEFAULT_CARD_ASSIGNEE = 'William West';
+const VIEW_STORAGE_KEY = 'westos.work.ticketView';
 
 function inferColumnType(rows, column) {
   const values = rows
@@ -116,6 +124,42 @@ function buildAiSampleRows(rows) {
       })
     )
   );
+}
+
+function formatRelativeTimestamp(value) {
+  if (!value) {
+    return 'Unknown';
+  }
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return value;
+  }
+
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (minutes < 1) {
+    return 'just now';
+  }
+
+  if (minutes === 1) {
+    return '1 minute ago';
+  }
+
+  if (minutes < 60) {
+    return `${minutes} minutes ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours === 1) {
+    return '1 hour ago';
+  }
+
+  if (hours < 24) {
+    return `${hours} hours ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+  return days === 1 ? '1 day ago' : `${days} days ago`;
 }
 
 function getDefaultVisibleColumns(analysis) {
@@ -342,6 +386,10 @@ const DataTable = memo(function DataTable({
   fileName,
   onRowSelect,
   selectedRow,
+  assigneeColumn = '',
+  assigneeDrafts = {},
+  onAssigneeChange,
+  onAssigneeCommit,
 }) {
   if (!visibleColumns.length) {
     return (
@@ -439,9 +487,33 @@ const DataTable = memo(function DataTable({
                 }}
                 tabIndex={0}
               >
-                {visibleColumns.map((column) => (
-                  <td key={`${rowIndex}-${column}`}>{getCellText(row, column) || '—'}</td>
-                ))}
+                {visibleColumns.map((column) => {
+                  const ticketId = getTicketId(row, visibleColumns);
+
+                  if (column === assigneeColumn) {
+                    return (
+                      <td key={`${rowIndex}-${column}`}>
+                        <input
+                          className="data-table__inline-input"
+                          onBlur={() => onAssigneeCommit?.(ticketId, assigneeDrafts[ticketId] ?? getCellText(row, column))}
+                          onChange={(event) => onAssigneeChange?.(ticketId, event.target.value)}
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => {
+                            event.stopPropagation();
+
+                            if (event.key === 'Enter') {
+                              event.currentTarget.blur();
+                            }
+                          }}
+                          type="text"
+                          value={assigneeDrafts[ticketId] ?? getCellText(row, column)}
+                        />
+                      </td>
+                    );
+                  }
+
+                  return <td key={`${rowIndex}-${column}`}>{getCellText(row, column) || '—'}</td>;
+                })}
               </tr>
             ))
           ) : (
@@ -461,11 +533,21 @@ export function WorkPage() {
   const navigate = useNavigate();
   const [selectedFile, setSelectedFile] = useState(null);
   const [analysis, setAnalysis] = useState(null);
+  const [latestDataset, setLatestDataset] = useState({ columns: [], rows: [] });
+  const [latestSource, setLatestSource] = useState('');
+  const [latestUpdatedAt, setLatestUpdatedAt] = useState('');
+  const [latestMessage, setLatestMessage] = useState('');
+  const [isLoadingLatest, setIsLoadingLatest] = useState(true);
+  const [ticketView, setTicketView] = useState(() => window.localStorage.getItem(VIEW_STORAGE_KEY) || 'card');
+  const [assigneeFilter, setAssigneeFilter] = useState(DEFAULT_CARD_ASSIGNEE);
+  const [assigneeDrafts, setAssigneeDrafts] = useState({});
   const [recentAnalyses, setRecentAnalyses] = useState([]);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingRecent, setIsLoadingRecent] = useState(true);
   const [visibleColumns, setVisibleColumns] = useState([]);
+  const [latestColumnFilters, setLatestColumnFilters] = useState({});
+  const [latestSortConfig, setLatestSortConfig] = useState({ column: '', direction: 'asc' });
   const [rowFilter, setRowFilter] = useState('');
   const [aiAnalysis, setAiAnalysis] = useState('');
   const [aiError, setAiError] = useState('');
@@ -478,6 +560,54 @@ export function WorkPage() {
   const [debouncedRowFilter, setDebouncedRowFilter] = useState('');
   const [selectedRow, setSelectedRow] = useState(null);
   const [isLoadingSavedRun, setIsLoadingSavedRun] = useState(false);
+
+  async function loadLatestDataset() {
+    setIsLoadingLatest(true);
+
+    try {
+      const result = await getLatestTickets();
+      const payload = result.data || {};
+      const columns = payload.columns || Object.keys(payload.tickets?.[0] || {});
+      const cachedRows = getCachedWorkDataset()?.rows || [];
+      const cachedByTicketId = new Map(
+        cachedRows.map((row) => [getTicketId(row, Object.keys(row || {})), row])
+      );
+      const rows = (payload.tickets || []).map((row) => {
+        const cachedRow = cachedByTicketId.get(getTicketId(row, columns));
+
+        if (!cachedRow?.ai_analysis) {
+          return row;
+        }
+
+        return {
+          ...row,
+          ai_analysis: cachedRow.ai_analysis,
+        };
+      });
+      const nextDataset = {
+        columns,
+        rows,
+      };
+
+      setLatestDataset(nextDataset);
+      setLatestSource(payload.source || '');
+      setLatestUpdatedAt(payload.last_updated || '');
+      setLatestMessage(payload.message || '');
+      setCachedWorkDataset(nextDataset);
+      setAssigneeDrafts(
+        Object.fromEntries(
+          rows.map((row) => [getTicketId(row, columns), getTicketAssignee(row, columns)])
+        )
+      );
+    } catch (requestError) {
+      setLatestDataset({ columns: [], rows: [] });
+      setLatestSource('');
+      setLatestUpdatedAt('');
+      setLatestMessage(requestError.message || 'Latest tickets could not be loaded.');
+    } finally {
+      setIsLoadingLatest(false);
+    }
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -508,6 +638,26 @@ export function WorkPage() {
 
     return () => {
       isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(VIEW_STORAGE_KEY, ticketView);
+  }, [ticketView]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void loadLatestDataset();
+    const intervalId = window.setInterval(() => {
+      if (isMounted) {
+        void loadLatestDataset();
+      }
+    }, 30000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
     };
   }, []);
 
@@ -602,31 +752,62 @@ export function WorkPage() {
     () => (selectedRow && analysis?.columns?.length ? buildRowDetail(selectedRow, analysis.columns) : null),
     [analysis, selectedRow]
   );
-  const ticketDataset = useMemo(() => {
-    const cachedDataset = getCachedWorkDataset();
-
-    if (
-      cachedDataset?.rows?.length &&
-      analysis &&
-      ((cachedDataset.analysisId && cachedDataset.analysisId === analysis.analysisId) ||
-        cachedDataset.fileName === analysis.fileName)
-    ) {
-      return cachedDataset;
+  const latestColumns = latestDataset.columns || [];
+  const latestVisibleColumns = useMemo(() => {
+    if (!latestColumns.length) {
+      return [];
     }
 
-    return null;
-  }, [analysis]);
-  const activeTickets = useMemo(
+    const fieldMap = getTicketColumns(latestColumns);
+    return Array.from(
+      new Set(
+        [fieldMap.id, fieldMap.title, fieldMap.assignee, fieldMap.updated, fieldMap.status].filter(Boolean)
+      )
+    );
+  }, [latestColumns]);
+  const latestAssigneeColumn = useMemo(() => getTicketColumns(latestColumns).assignee, [latestColumns]);
+  const latestTickets = useMemo(
     () =>
-      ticketDataset?.rows?.filter((row) => {
-        if (!isActiveTicket(row, ticketDataset.columns)) {
+      (latestDataset.rows || []).filter((row) => {
+        if (!isActiveTicket(row, latestColumns)) {
           return false;
         }
 
-        return getTicketAssignee(row, ticketDataset.columns).trim().toLowerCase() === DEFAULT_CARD_ASSIGNEE.toLowerCase();
-      }) || [],
-    [ticketDataset]
+        if (!assigneeFilter.trim()) {
+          return true;
+        }
+
+        return getTicketAssignee(row, latestColumns).trim().toLowerCase().includes(assigneeFilter.trim().toLowerCase());
+      }),
+    [assigneeFilter, latestColumns, latestDataset.rows]
   );
+  const latestColumnTypeMap = useMemo(
+    () => Object.fromEntries(latestVisibleColumns.map((column) => [column, inferColumnType(latestTickets, column)])),
+    [latestTickets, latestVisibleColumns]
+  );
+  const filteredLatestRows = useMemo(() => {
+    if (!latestTickets.length) {
+      return [];
+    }
+
+    const filteredRows = latestTickets.filter((row) =>
+      latestVisibleColumns.every((column) =>
+        matchesColumnFilter(row[column], latestColumnTypeMap[column] || 'text', latestColumnFilters[column])
+      )
+    );
+
+    if (!latestSortConfig.column) {
+      return filteredRows;
+    }
+
+    const sortDirection = latestSortConfig.direction === 'asc' ? 1 : -1;
+    const columnType = latestColumnTypeMap[latestSortConfig.column] || 'text';
+
+    return [...filteredRows].sort(
+      (leftRow, rightRow) =>
+        compareValues(leftRow[latestSortConfig.column], rightRow[latestSortConfig.column], columnType) * sortDirection
+    );
+  }, [latestColumnFilters, latestColumnTypeMap, latestSortConfig, latestTickets, latestVisibleColumns]);
 
   async function runAnalysis(file) {
     setError('');
@@ -665,6 +846,8 @@ export function WorkPage() {
         .catch(() => {
           setCachedWorkDataset(null);
         });
+
+      await loadLatestDataset();
 
       return result.data;
     } catch (requestError) {
@@ -719,6 +902,37 @@ export function WorkPage() {
     }
   }
 
+  function handleAssigneeDraftChange(ticketId, value) {
+    if (!latestAssigneeColumn) {
+      return;
+    }
+
+    setAssigneeDrafts((current) => ({
+      ...current,
+      [ticketId]: value,
+    }));
+    setLatestDataset((current) => ({
+      ...current,
+      rows: current.rows.map((row) =>
+        getTicketId(row, current.columns) === ticketId
+          ? {
+              ...row,
+              [latestAssigneeColumn]: value,
+            }
+          : row
+      ),
+    }));
+  }
+
+  async function handleAssigneeCommit(ticketId, assignee) {
+    try {
+      await updateTicketAssignee(ticketId, assignee);
+      await loadLatestDataset();
+    } catch (requestError) {
+      setError(requestError.message || 'Assignee could not be updated.');
+    }
+  }
+
   function toggleColumn(column) {
     setVisibleColumns((current) =>
       current.includes(column) ? current.filter((item) => item !== column) : [...current, column]
@@ -758,7 +972,7 @@ export function WorkPage() {
   }
 
   function handlePreviewRowSelect(row) {
-    const ticketId = getTicketId(row, analysis?.columns || []);
+    const ticketId = getTicketId(row, Object.keys(row || {}));
 
     if (!ticketId || ticketId === 'Untitled ticket') {
       setSelectedRow(row);
@@ -1047,28 +1261,114 @@ export function WorkPage() {
               <CardHeader
                 eyebrow="Tickets"
                 title="Active ticket queue"
-                description="Only records where active=true are shown here as clickable ticket cards."
+                description="The latest persisted ticket dataset is shown here and refreshes automatically."
+                action={
+                  <div className="ticket-queue__actions">
+                    <input
+                      className="ticket-queue__filter"
+                      onChange={(event) => setAssigneeFilter(event.target.value)}
+                      placeholder="Filter by assignee"
+                      type="text"
+                      value={assigneeFilter}
+                    />
+                    <button
+                      className={ticketView === 'card' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                      onClick={() => setTicketView('card')}
+                      type="button"
+                    >
+                      Card View
+                    </button>
+                    <button
+                      className={ticketView === 'table' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                      onClick={() => setTicketView('table')}
+                      type="button"
+                    >
+                      Table View
+                    </button>
+                    <button className="compact-toggle" onClick={() => void loadLatestDataset()} type="button">
+                      <RotateCcw size={15} />
+                      Refresh
+                    </button>
+                  </div>
+                }
               />
 
-              {ticketDataset ? (
-                activeTickets.length ? (
+              <div className="ticket-source-banner">
+                <span className="ticket-source-banner__pill">
+                  Source: {latestSource === 'email' ? 'Email Upload' : latestSource === 'manual' ? 'Manual Upload' : 'Unknown'}
+                </span>
+                <span>Last Updated: {formatRelativeTimestamp(latestUpdatedAt)}</span>
+              </div>
+
+              {latestMessage ? <p className="status-text">{latestMessage}</p> : null}
+              {isLoadingLatest ? <p className="status-text">Refreshing latest tickets...</p> : null}
+
+              {latestDataset.rows.length ? (
+                latestTickets.length ? (
+                  ticketView === 'card' ? (
                   <div className="ticket-card-grid">
-                    {activeTickets.map((ticket) => (
-                      <TicketCard key={getTicketId(ticket, ticketDataset.columns)} columns={ticketDataset.columns} ticket={ticket} />
+                    {latestTickets.map((ticket) => (
+                      <TicketCard
+                        key={getTicketId(ticket, latestColumns)}
+                        assigneeDraft={assigneeDrafts[getTicketId(ticket, latestColumns)]}
+                        columns={latestColumns}
+                        onAssigneeChange={handleAssigneeDraftChange}
+                        onAssigneeCommit={handleAssigneeCommit}
+                        ticket={ticket}
+                      />
                     ))}
                   </div>
+                  ) : (
+                    <DataTable
+                      assigneeColumn={latestAssigneeColumn}
+                      assigneeDrafts={assigneeDrafts}
+                      columnFilters={latestColumnFilters}
+                      columnTypeMap={latestColumnTypeMap}
+                      fileName="latest"
+                      onAssigneeChange={handleAssigneeDraftChange}
+                      onAssigneeCommit={handleAssigneeCommit}
+                      onColumnFilterChange={(column, key, value) =>
+                        setLatestColumnFilters((current) => ({
+                          ...current,
+                          [column]: {
+                            ...getColumnFilterDefaults(latestColumnTypeMap[column] || 'text'),
+                            ...current[column],
+                            [key]: value,
+                          },
+                        }))
+                      }
+                      onRowSelect={handlePreviewRowSelect}
+                      onSort={(column) =>
+                        setLatestSortConfig((current) => {
+                          if (current.column !== column) {
+                            return { column, direction: 'asc' };
+                          }
+
+                          if (current.direction === 'asc') {
+                            return { column, direction: 'desc' };
+                          }
+
+                          return { column: '', direction: 'asc' };
+                        })
+                      }
+                      rows={filteredLatestRows}
+                      selectedRow={null}
+                      sortConfig={latestSortConfig}
+                      visibleColumns={latestVisibleColumns}
+                    />
+                  )
                 ) : (
                   <EmptyState
                     icon={<FileSpreadsheet size={20} />}
                     title="No assigned active tickets found"
-                    description={`The loaded dataset does not contain any active tickets assigned to ${DEFAULT_CARD_ASSIGNEE}.`}
+                    description={`The latest dataset does not contain any active tickets assigned to ${assigneeFilter || DEFAULT_CARD_ASSIGNEE}.`}
                   />
                 )
               ) : (
                 <EmptyState
                   icon={<FileSpreadsheet size={20} />}
-                  title="Full ticket list unavailable"
-                  description="Load a CSV or reopen a saved run with full row data to browse tickets as cards."
+                  title="No latest ticket dataset"
+                  description="Upload a CSV manually or deliver one by email to populate the live ticket dataset."
                 />
               )}
             </Card>

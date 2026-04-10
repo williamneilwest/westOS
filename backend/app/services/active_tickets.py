@@ -1,7 +1,10 @@
 import csv
 import io
+import json
 import logging
 import os
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .data_processing import normalize_headers
@@ -9,14 +12,36 @@ from .data_processing import normalize_headers
 
 LOGGER = logging.getLogger(__name__)
 _cached_dataset = None
+_cached_metadata = None
+
+SOURCE_EMAIL = 'email'
+SOURCE_MANUAL = 'manual'
+ASSIGNEE_PATTERNS = (
+    re.compile(r'assigned_to', re.IGNORECASE),
+    re.compile(r'assignee', re.IGNORECASE),
+    re.compile(r'owner', re.IGNORECASE),
+    re.compile(r'agent', re.IGNORECASE),
+)
 
 
-def _active_tickets_path():
-    return Path(os.getenv('ACTIVE_TICKETS_PATH', '/data/active_tickets.csv'))
+def _storage_root():
+    return Path(os.getenv('BACKEND_DATA_DIR', '/app/data'))
+
+
+def _latest_csv_path():
+    return _storage_root() / 'latest.csv'
+
+
+def _source_metadata_path():
+    return _storage_root() / 'source.json'
 
 
 def _ensure_storage_dir():
-    _active_tickets_path().parent.mkdir(parents=True, exist_ok=True)
+    _storage_root().mkdir(parents=True, exist_ok=True)
+
+
+def _current_timestamp():
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _parse_csv_bytes(content):
@@ -26,6 +51,9 @@ def _parse_csv_bytes(content):
     reader.fieldnames = headers
     rows = [dict(row) for row in reader]
 
+    if 'Ticket' not in headers:
+        raise ValueError('The active ticket dataset is missing the Ticket field.')
+
     LOGGER.info('Active ticket dataset loaded with %s records.', len(rows))
 
     return {
@@ -34,53 +62,171 @@ def _parse_csv_bytes(content):
     }
 
 
-def save_active_tickets_csv(content):
+def _write_csv(dataset):
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=dataset['columns'], extrasaction='ignore')
+    writer.writeheader()
+
+    for row in dataset['rows']:
+        writer.writerow({column: row.get(column, '') for column in dataset['columns']})
+
+    content = output.getvalue().encode('utf-8')
+    _latest_csv_path().write_bytes(content)
+    LOGGER.info('Latest ticket CSV overwritten at %s', _latest_csv_path())
+
+
+def _read_source_metadata():
+    path = _source_metadata_path()
+    if not path.exists():
+        return {
+            'source': None,
+            'last_updated': None,
+        }
+
+    try:
+        with path.open('r', encoding='utf-8') as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {
+            'source': None,
+            'last_updated': None,
+        }
+
+    if not isinstance(payload, dict):
+        return {
+            'source': None,
+            'last_updated': None,
+        }
+
+    return {
+        'source': payload.get('source'),
+        'last_updated': payload.get('last_updated'),
+    }
+
+
+def _write_source_metadata(source, last_updated):
     _ensure_storage_dir()
-    path = _active_tickets_path()
-    path.write_bytes(content)
-    LOGGER.info('Active tickets CSV overwritten at %s', path)
+    payload = {
+        'source': source,
+        'last_updated': last_updated,
+    }
+
+    with _source_metadata_path().open('w', encoding='utf-8') as handle:
+        json.dump(payload, handle, indent=2)
+
+
+def _set_cached_metadata(source, last_updated):
+    global _cached_metadata
+    _cached_metadata = {
+        'source': source,
+        'last_updated': last_updated,
+    }
+
+
+def _find_assignee_column(columns):
+    for column in columns:
+        if any(pattern.search(column) for pattern in ASSIGNEE_PATTERNS):
+            return column
+
+    return ''
 
 
 def load_active_ticket_dataset(force_reload=False):
-    global _cached_dataset
+    global _cached_dataset, _cached_metadata
 
     if _cached_dataset is not None and not force_reload:
+        if _cached_metadata is None:
+            _cached_metadata = _read_source_metadata()
         return _cached_dataset
 
-    path = _active_tickets_path()
+    path = _latest_csv_path()
 
     if not path.exists():
-        return None
+        _cached_dataset = {
+            'columns': [],
+            'rows': [],
+        }
+        _cached_metadata = _read_source_metadata()
+        return _cached_dataset
 
     content = path.read_bytes()
     _cached_dataset = _parse_csv_bytes(content)
-
-    if 'Ticket' not in _cached_dataset['columns']:
-        raise ValueError('The active ticket dataset is missing the Ticket field.')
-
+    _cached_metadata = _read_source_metadata()
     return _cached_dataset
 
 
-def cache_active_ticket_dataset(content):
+def get_source_metadata(force_reload=False):
+    global _cached_metadata
+
+    if _cached_metadata is not None and not force_reload:
+        return _cached_metadata
+
+    _cached_metadata = _read_source_metadata()
+    return _cached_metadata
+
+
+def cache_active_ticket_dataset(content, source):
     global _cached_dataset
 
-    save_active_tickets_csv(content)
-    _cached_dataset = _parse_csv_bytes(content)
+    _ensure_storage_dir()
+    dataset = _parse_csv_bytes(content)
+    _write_csv(dataset)
+    timestamp = _current_timestamp()
+    _write_source_metadata(source, timestamp)
+    _set_cached_metadata(source, timestamp)
+    _cached_dataset = dataset
+    return dataset
 
-    if 'Ticket' not in _cached_dataset['columns']:
-        raise ValueError('The active ticket dataset is missing the Ticket field.')
 
-    return _cached_dataset
+def load_latest_ticket_payload(force_reload=False):
+    dataset = load_active_ticket_dataset(force_reload=force_reload)
+    metadata = get_source_metadata(force_reload=force_reload)
+
+    return {
+        'source': metadata.get('source'),
+        'last_updated': metadata.get('last_updated'),
+        'tickets': dataset['rows'],
+        'columns': dataset['columns'],
+        'message': '' if dataset['rows'] else 'No CSV dataset has been loaded yet.',
+    }
 
 
 def get_ticket_by_id(ticket_id):
     dataset = load_active_ticket_dataset()
-
-    if not dataset:
-        return None
 
     for row in dataset['rows']:
         if str(row.get('Ticket', '')).strip() == ticket_id:
             return row
 
     return None
+
+
+def update_ticket_assignee(ticket_id, assignee):
+    global _cached_dataset
+
+    dataset = load_active_ticket_dataset()
+    assignee_column = _find_assignee_column(dataset['columns'])
+
+    if not assignee_column:
+        raise ValueError('The latest dataset does not include an assignee column.')
+
+    updated = False
+    for row in dataset['rows']:
+        if str(row.get('Ticket', '')).strip() != ticket_id:
+            continue
+
+        row[assignee_column] = assignee
+        updated = True
+        break
+
+    if not updated:
+        return None
+
+    _write_csv(dataset)
+    metadata = get_source_metadata()
+    last_updated = _current_timestamp()
+    source = metadata.get('source') or SOURCE_MANUAL
+    _write_source_metadata(source, last_updated)
+    _set_cached_metadata(source, last_updated)
+    _cached_dataset = dataset
+    return get_ticket_by_id(ticket_id)

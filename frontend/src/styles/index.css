@@ -939,6 +939,11 @@ textarea {
   cursor: pointer;
 }
 
+.compact-toggle--active {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(16, 185, 129, 0.12);
+}
+
 .compact-toggle--icon {
   padding-inline: 0.7rem;
 }
@@ -1478,6 +1483,16 @@ textarea {
   background: rgba(16, 185, 129, 0.09);
 }
 
+.data-table__inline-input {
+  width: 100%;
+  min-width: 140px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .row-detail-backdrop {
   position: fixed;
   inset: 0;
@@ -1594,6 +1609,44 @@ textarea {
   gap: 1rem;
 }
 
+.ticket-queue__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+
+.ticket-queue__filter {
+  min-width: 180px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ticket-source-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+  margin-bottom: 0.9rem;
+  color: var(--text-muted);
+}
+
+.ticket-source-banner__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  background: rgba(16, 185, 129, 0.08);
+  color: #b7f7cf;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 .ticket-card-link {
   display: block;
 }
@@ -1603,6 +1656,32 @@ textarea {
   gap: 1rem;
   min-height: 100%;
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.ticket-card__assignee-editor {
+  padding-top: 0.2rem;
+  border-top: 1px solid var(--border);
+}
+
+.ticket-card__assignee-editor label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.ticket-card__assignee-editor span {
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ticket-card__assignee-editor input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .ticket-card-link:hover .ticket-card,

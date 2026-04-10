@@ -9,13 +9,14 @@ import {
   getTicketTitle,
 } from '../utils/aiAnalysis';
 
-export function TicketCard({ ticket, columns }) {
+export function TicketCard({ ticket, columns, assigneeDraft, onAssigneeChange, onAssigneeCommit }) {
   const ticketId = getTicketId(ticket, columns);
   const hasAiAnalysis = Boolean(ticket?.ai_analysis?.result);
+  const assigneeValue = assigneeDraft ?? getTicketAssignee(ticket, columns);
 
   return (
-    <Link className="ticket-card-link" to={`/tickets/${encodeURIComponent(ticketId)}`}>
-      <Card className="ticket-card">
+    <Card className="ticket-card">
+      <Link className="ticket-card-link" to={`/tickets/${encodeURIComponent(ticketId)}`}>
         <div className="ticket-card__header">
           <div>
             <span className="ui-eyebrow">Ticket</span>
@@ -48,7 +49,25 @@ export function TicketCard({ ticket, columns }) {
             <ArrowRight size={15} />
           </span>
         </div>
-      </Card>
-    </Link>
+      </Link>
+
+      <div className="ticket-card__assignee-editor">
+        <label>
+          <span>Assignee</span>
+          <input
+            onBlur={() => onAssigneeCommit?.(ticketId, assigneeValue)}
+            onChange={(event) => onAssigneeChange?.(ticketId, event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur();
+              }
+            }}
+            type="text"
+            value={assigneeValue}
+          />
+        </label>
+      </div>
+    </Card>
   );
 }
