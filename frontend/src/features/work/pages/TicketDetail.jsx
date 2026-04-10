@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Clock3, MessageSquareText, Sparkles, UserRound } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { sendAiChat } from '../../../app/services/api';
@@ -41,7 +41,6 @@ export function TicketDetail() {
   const [analysisResult, setAnalysisResult] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const hasAutoAnalyzedRef = useRef(false);
 
   const ticket = useMemo(() => findTicketById(dataset, decodedTicketId), [dataset, decodedTicketId]);
   const columns = dataset?.columns || [];
@@ -51,10 +50,6 @@ export function TicketDetail() {
     () => parseTicketAiAnalysis(analysisResult),
     [analysisResult]
   );
-
-  useEffect(() => {
-    hasAutoAnalyzedRef.current = false;
-  }, [decodedTicketId]);
 
   useEffect(() => {
     setAnalysisResult(ticket?.ai_analysis?.result || '');
@@ -92,15 +87,6 @@ export function TicketDetail() {
       setLoading(false);
     }
   }
-
-  useEffect(() => {
-    if (!ticket || hasAutoAnalyzedRef.current) {
-      return;
-    }
-
-    hasAutoAnalyzedRef.current = true;
-    void runAnalysis();
-  }, [ticket]);
 
   if (!dataset?.rows?.length) {
     return (
@@ -226,7 +212,7 @@ export function TicketDetail() {
               <EmptyState
                 icon={<Sparkles size={20} />}
                 title="No AI analysis yet"
-                description="Analysis starts automatically when the ticket page loads."
+                description="Run analysis manually when you want an AI review for this ticket."
               />
             )}
           </Card>
@@ -240,6 +226,8 @@ export function TicketDetail() {
                 <article className="ticket-note" key={note.id}>
                   <p className="ticket-note__lead">
                     <strong>{note.author || 'Unknown author'}</strong>
+                    {' · '}
+                    <span>{note.type || 'Update'}</span>
                     {' · '}
                     <span>{note.timestamp ? note.timestamp.toLocaleString() : 'Unknown time'}</span>
                   </p>

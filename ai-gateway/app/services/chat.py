@@ -1,4 +1,10 @@
+import logging
+from time import perf_counter
+
 from litellm import completion
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _uses_ollama(model, api_base):
@@ -37,28 +43,42 @@ def run_chat_completion(payload, model, temperature, max_tokens, api_base):
         raise RuntimeError('LiteLLM model is not configured. Set LITELLM_MODEL in the environment.')
 
     messages = _normalize_messages(payload)
-    request_temperature = payload.get('temperature', temperature)
-    request_max_tokens = payload.get('max_tokens', max_tokens)
+    request_temperature = 0.2
+    request_max_tokens = min(int(payload.get('max_tokens', max_tokens)), 100)
 
     request_kwargs = {
         'model': model,
         'messages': messages,
         'temperature': request_temperature,
         'max_tokens': request_max_tokens,
-        'extra_body': {'keep_alive': -1},
+        'stream': False,
+        'extra_body': {
+            'keep_alive': -1,
+            'options': {
+                'num_predict': 100,
+                'num_ctx': 1024,
+                'temperature': 0.2,
+            },
+        },
     }
 
     if _uses_ollama(model, api_base):
         request_kwargs['api_base'] = api_base
 
+    started_at = perf_counter()
+    LOGGER.info('Starting AI request for model %s', model)
+
     try:
         response = completion(**request_kwargs)
     except Exception as error:
+        LOGGER.info('AI request failed for model %s in %.2fs', model, perf_counter() - started_at)
         if _uses_ollama(model, api_base):
             raise RuntimeError(
                 'LiteLLM could not reach Ollama. Verify OLLAMA_API_BASE and that the Ollama server is running.'
             ) from error
         raise RuntimeError(f'LiteLLM request failed: {error}') from error
+
+    LOGGER.info('AI request finished for model %s in %.2fs', model, perf_counter() - started_at)
 
     return response.model_dump() if hasattr(response, 'model_dump') else response
 
@@ -70,9 +90,17 @@ def warmup_chat_completion(model, temperature, max_tokens, api_base):
     request_kwargs = {
         'model': model,
         'messages': [{'role': 'user', 'content': 'warmup'}],
-        'temperature': temperature,
+        'temperature': 0.2,
         'max_tokens': 1,
-        'extra_body': {'keep_alive': -1},
+        'stream': False,
+        'extra_body': {
+            'keep_alive': -1,
+            'options': {
+                'num_predict': 100,
+                'num_ctx': 1024,
+                'temperature': 0.2,
+            },
+        },
     }
 
     if _uses_ollama(model, api_base):

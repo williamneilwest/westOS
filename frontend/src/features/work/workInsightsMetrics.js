@@ -173,21 +173,9 @@ export function buildInsights(dataset) {
 
 export function buildInsightsSummaryPrompt(dataset, insights) {
   return [
-    'You are an operations analyst.',
-    'Summarize these ticket metrics in 4 short bullet points.',
-    'Use only the metrics provided.',
-    'Focus on backlog risk, ownership, recent activity, and one practical next step.',
-    'Do not mention raw rows or speculate beyond the metrics.',
-    '',
-    `Dataset: ${dataset?.fileName || 'Unknown CSV'}`,
-    `Rows: ${dataset?.rows?.length || 0}`,
-    `Columns: ${dataset?.columns?.length || 0}`,
+    'Summarize in 2 sentences:',
     `Summary metrics: ${insights.summaryMetrics.map((metric) => `${metric.label}=${metric.value} (${metric.detail})`).join('; ')}`,
-    `State breakdown: ${insights.stateBreakdown.slice(0, 8).map((item) => `${item.label}=${item.count}`).join('; ') || 'None'}`,
-    `Closed by assignee: ${insights.closedByAssignee.slice(0, 8).map((item) => `${item.label}=${item.count}`).join('; ') || 'None'}`,
-    `Most active assignees: ${insights.activeAssignees.slice(0, 8).map((item) => `${item.label}=${item.count}`).join('; ') || 'None'}`,
-    `Oldest open tickets: ${insights.oldestOpenTickets.map((ticket) => `${ticket.id} opened ${ticket.openedAt} assignee=${ticket.assignee}`).join('; ') || 'None'}`,
-    `Keywords: ${insights.keywords.map((item) => `${item.label}=${item.count}`).join('; ') || 'None'}`,
-    `Data quality: ${insights.dataQuality.map((item) => `${item.label}=${item.value}`).join('; ')}`,
+    `State breakdown: ${insights.stateBreakdown.slice(0, 5).map((item) => `${item.label}=${item.count}`).join('; ') || 'None'}`,
+    `Ownership: ${insights.activeAssignees.slice(0, 5).map((item) => `${item.label}=${item.count}`).join('; ') || 'None'}`,
   ].join('\n');
 }

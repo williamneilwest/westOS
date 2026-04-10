@@ -4,10 +4,10 @@
 westos.dev {
 
     # -------------------------
-    # AI Gateway API
+    # AI API
     # -------------------------
     handle_path /api/ai/* {
-        reverse_proxy ai-gateway:5001
+        reverse_proxy backend:5000
     }
 
     # -------------------------

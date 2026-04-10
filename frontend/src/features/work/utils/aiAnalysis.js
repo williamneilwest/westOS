@@ -6,6 +6,7 @@ const ACTIVE_PATTERNS = [/^active$/i, /is_active/i, /open/i];
 const UPDATED_PATTERNS = [/sys_updated_on/i, /updated/i, /last.?updated/i, /modified/i];
 const PRIMARY_NOTE_COLUMN = 'comments_and_work_notes';
 const SUPPRESSED_COLUMNS = new Set(['comments', 'work_notes']);
+const HEADER_AUTHOR_TYPE_PATTERN = /^([^\n(]+?)\s*\(([^)]+)\)\s*/i;
 const DATE_PATTERN =
   /(\d{4}-\d{2}-\d{2}(?:[ t]\d{2}:\d{2}(?::\d{2})?)?(?:z|[+-]\d{2}:?\d{2})?|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:[ t]\d{1,2}:\d{2}(?::\d{2})?)?)/i;
 const AUTHOR_PATTERN = /\b(?:by|author|user|updated by)\s*[:\-]?\s*([a-z][a-z .,'_-]{1,60})/i;
@@ -20,6 +21,18 @@ const AI_SECTION_KEYS = {
 
 function normalizeValue(value) {
   return String(value ?? '').trim();
+}
+
+function normalizeNoteContent(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function truncateNoteContent(value, maxLength = 100) {
+  const normalized = normalizeValue(value).replace(/\s+/g, ' ');
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3)}...` : normalized;
 }
 
 function findColumn(columns = [], patterns = []) {
@@ -60,8 +73,33 @@ function extractDate(value) {
 
 function extractAuthor(value) {
   const text = normalizeValue(value);
+  const headerMatch = text.match(HEADER_AUTHOR_TYPE_PATTERN);
+  if (headerMatch) {
+    return normalizeValue(headerMatch[1]);
+  }
   const match = text.match(AUTHOR_PATTERN);
   return match ? normalizeValue(match[1]) : '';
+}
+
+function extractNoteType(value, fallback = 'Comments and Work Notes') {
+  const text = normalizeValue(value);
+  const headerMatch = text.match(HEADER_AUTHOR_TYPE_PATTERN);
+  return headerMatch ? normalizeValue(headerMatch[2]) : fallback;
+}
+
+function cleanNoteBody(value) {
+  const text = normalizeValue(value);
+
+  if (!text) {
+    return '';
+  }
+
+  const headerMatch = text.match(HEADER_AUTHOR_TYPE_PATTERN);
+  if (!headerMatch) {
+    return text;
+  }
+
+  return text.slice(headerMatch[0].length).trim();
 }
 
 function formatLabel(value) {
@@ -91,6 +129,34 @@ export function getTicketColumns(columns = []) {
 
 export function isSuppressedTicketColumn(column) {
   return SUPPRESSED_COLUMNS.has(normalizeValue(column).toLowerCase());
+}
+
+export function dedupeNotes(notes = []) {
+  const seen = new Map();
+
+  for (const note of notes) {
+    const normalizedContent = normalizeNoteContent(note.content || note.value || '');
+    const timestampValue =
+      note.timestamp instanceof Date
+        ? note.timestamp.toISOString()
+        : normalizeValue(note.timestamp);
+    const key = `${timestampValue}_${normalizedContent}`;
+
+    if (!seen.has(key)) {
+      seen.set(key, note);
+      continue;
+    }
+
+    const existing = seen.get(key);
+    const existingType = normalizeValue(existing?.type).toLowerCase();
+    const nextType = normalizeValue(note?.type).toLowerCase();
+
+    if (existingType !== 'work notes' && nextType === 'work notes') {
+      seen.set(key, note);
+    }
+  }
+
+  return Array.from(seen.values());
 }
 
 export function getTicketId(ticket, columns = Object.keys(ticket || {})) {
@@ -130,27 +196,28 @@ export function getTicketNotes(ticket, columns = Object.keys(ticket || {})) {
     splitNoteEntries(ticket?.[column]).map((entry, index) => ({
       id: `${column}-${index}`,
       label: formatLabel(column),
-      type: formatLabel(column),
-      value: entry,
+      type: extractNoteType(entry, formatLabel(column)),
+      value: cleanNoteBody(entry),
+      content: cleanNoteBody(entry),
       timestamp: extractDate(entry),
       author: extractAuthor(entry),
     }))
   );
 
-  return [...notes].reverse();
+  return dedupeNotes([...notes].reverse());
 }
 
-export function compress_notes(notes, limit = 5) {
+export function compress_notes(notes, limit = 3) {
   return notes
-    .slice(-limit)
-    .map((note) => `${note.type}: ${note.value}`)
+    .slice(0, limit)
+    .map((note) => truncateNoteContent(note.value, 100))
     .join('\n\n');
 }
 
 export function get_last_update_info(ticket, columns = Object.keys(ticket || {})) {
   const fieldMap = getTicketColumns(columns);
   const notes = getTicketNotes(ticket, columns);
-  const lastNote = notes[notes.length - 1] || null;
+  const lastNote = notes[0] || null;
   const updatedAt = parseDate(ticket?.[fieldMap.updated]) || lastNote?.timestamp || null;
   const daysSince =
     updatedAt ? Math.max(0, Math.floor((Date.now() - updatedAt.getTime()) / (24 * 60 * 60 * 1000))) : null;
@@ -182,15 +249,7 @@ export function build_prompt(ticket, days_since, last_author, last_type) {
     .map((column) => `${formatLabel(column)}: ${normalizeValue(ticket?.[column]) || 'Unknown'}`);
 
   return [
-    'You are an operations ticket analyst.',
-    'Review the ticket context and provide concise sections with these exact headings:',
-    'Summary:',
-    'Root cause:',
-    'Work performed:',
-    'Blocker:',
-    'Next step:',
-    'Stalled status:',
-    '',
+    'Summarize in 2 sentences:',
     `Ticket ID: ${getTicketId(ticket, columns)}`,
     `Title: ${getTicketTitle(ticket, columns)}`,
     `Assigned to: ${getTicketAssignee(ticket, columns)}`,
@@ -198,12 +257,9 @@ export function build_prompt(ticket, days_since, last_author, last_type) {
     `Days since last update: ${days_since ?? 'Unknown'}`,
     `Last update author: ${last_author || 'Unknown'}`,
     `Last update type: ${last_type || 'Unknown'}`,
-    '',
-    'Ticket metadata:',
-    metadataLines.join('\n'),
-    '',
-    'Recent notes:',
-    compress_notes(notes, 5) || 'No notes available.',
+    ...metadataLines.slice(0, 4),
+    'Last 3 notes:',
+    compress_notes(notes, 3) || 'No notes available.',
   ].join('\n');
 }
 

@@ -23,7 +23,7 @@ import { SectionHeader } from '../../app/ui/SectionHeader';
 import { TicketCard } from './components/TicketCard';
 import { getCachedWorkDataset, parseCsvText, setCachedWorkDataset } from './workDatasetCache';
 import { buildInsights, buildInsightsSummaryPrompt } from './workInsightsMetrics';
-import { getTicketColumns, getTicketId, isActiveTicket, isSuppressedTicketColumn } from './utils/aiAnalysis';
+import { dedupeNotes, getTicketColumns, getTicketId, isActiveTicket, isSuppressedTicketColumn } from './utils/aiAnalysis';
 
 function inferColumnType(rows, column) {
   const values = rows
@@ -229,13 +229,15 @@ function buildRowDetail(row, columns) {
     }
   }
 
-  const notes = noteColumns.flatMap((column) =>
+  const notes = dedupeNotes(noteColumns.flatMap((column) =>
     splitNoteEntries(row[column]).map((entry, index) => ({
       id: `${column}-${index}`,
       label: column,
+      type: column,
       value: entry,
+      content: entry,
     }))
-  ).reverse();
+  ).reverse());
 
   return {
     primary: primaryColumns.map((column) => ({ label: column, value: getCellText(row, column).trim() })).filter((item) => item.value),
@@ -766,15 +768,7 @@ export function WorkPage() {
     setLoadingAI(true);
     const cachedDataset = getCachedWorkDataset();
     let prompt = [
-      'You are an operations analyst.',
-      'Summarize these ticket metrics in 4 short bullet points.',
-      'Use only the metrics provided.',
-      'Focus on backlog risk, ownership, recent activity, and one practical next step.',
-      'Do not mention raw rows or speculate beyond the metrics.',
-      '',
-      `File: ${analysis.fileName}`,
-      `Rows: ${analysis.rowCount}`,
-      `Columns: ${analysis.columnCount}`,
+      'Summarize in 2 sentences:',
       `Category column: ${analysis.categoryColumn || 'None'}`,
       `Top categories: ${analysis.topCategories.map((item) => `${item.label} (${item.count})`).join('; ') || 'None'}`,
       `Column completeness: ${analysis.columnCompleteness.map((item) => `${item.column}=${item.filled} filled`).join('; ') || 'None'}`,

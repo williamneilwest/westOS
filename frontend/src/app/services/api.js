@@ -1,5 +1,5 @@
 const backendBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
-const aiBaseUrl = import.meta.env.VITE_AI_BASE_URL || '';
+const aiBaseUrl = backendBaseUrl;
 
 async function request(baseUrl, path, options = {}) {
   const response = await fetch(`${baseUrl}${path}`, options);
