@@ -23,6 +23,8 @@ caddy/data/
 caddy/config/
 caddy/Caddy_Local_Root.crt
 services/ollama/id_ed25519
+services/ollama/*.pub
+services/ollama/models/
 *.pem
 *.key
 id_ed25519
