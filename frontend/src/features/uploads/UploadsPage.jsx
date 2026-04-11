@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Eye, FileSpreadsheet } from 'lucide-react';
+import { ChevronDown, Eye, FileSpreadsheet } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getUploads } from '../../app/services/api';
 import { formatDataFileName } from '../../app/utils/fileDisplay';
@@ -63,6 +63,24 @@ export function UploadsPage() {
                     Download
                   </a>
                 </div>
+                <details className="upload-row-menu">
+                  <summary className="compact-toggle upload-row-menu__toggle">
+                    Actions
+                    <ChevronDown className="compact-toggle__icon" size={14} />
+                  </summary>
+                  <div className="upload-row-menu__panel">
+                    <Link
+                      className="upload-row-menu__action"
+                      to={`/app/work/table?url=${encodeURIComponent(file.url)}&fileName=${encodeURIComponent(file.filename)}`}
+                    >
+                      <Eye size={14} />
+                      View
+                    </Link>
+                    <a className="upload-row-menu__action" download={file.filename} href={file.url}>
+                      Download
+                    </a>
+                  </div>
+                </details>
               </div>
             ))}
           </div>

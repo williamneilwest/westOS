@@ -71,9 +71,17 @@ export const DataTable = memo(function DataTable({
                 }}
                 tabIndex={0}
               >
-                {visibleColumns.map((column) => (
-                  <td key={`${rowIndex}-${column}`}>{getCellText(row, column) || '—'}</td>
-                ))}
+                {visibleColumns.map((column) => {
+                  const cellText = getCellText(row, column) || '—';
+
+                  return (
+                    <td key={`${rowIndex}-${column}`}>
+                      <span className="data-table__cell-content" title={cellText}>
+                        {cellText}
+                      </span>
+                    </td>
+                  );
+                })}
               </tr>
             ))
           ) : (
