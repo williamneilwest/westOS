@@ -33,17 +33,6 @@ const USER_LOOKUP_PATTERNS = [
   /email/i,
 ];
 const OPID_PATTERN = /^[a-z]{2,}[a-z0-9]{2,}$/i;
-function normalizeTagList(value) {
-  if (Array.isArray(value)) {
-    return value.map((item) => normalizeLookupValue(item).toLowerCase()).filter(Boolean);
-  }
-
-  return String(value ?? '')
-    .replace(/\n/g, ',')
-    .split(',')
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-}
 
 function buildMetadataEntries(ticket, columns) {
   const fieldMap = getTicketColumns(columns);
@@ -60,6 +49,49 @@ function buildMetadataEntries(ticket, columns) {
 
 function normalizeLookupValue(value) {
   return String(value ?? '').trim();
+}
+
+function normalizeComparisonValue(value) {
+  return normalizeLookupValue(value).toLowerCase();
+}
+
+function normalizeCanonicalGroupKey(value) {
+  return normalizeComparisonValue(value).replace(/[^a-z0-9]+/g, '');
+}
+
+function getAssociatedGroupNames(rule) {
+  const tags = Array.isArray(rule?.associatedGroupTags) ? rule.associatedGroupTags : [];
+
+  return tags
+    .map((tag) => normalizeLookupValue(tag))
+    .map((tag) => (tag.toLowerCase().startsWith('group:') ? tag.slice('group:'.length) : tag))
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+function resolveTaggedGroups(referenceGroups, associatedGroupNames) {
+  const groupRows = Array.isArray(referenceGroups) ? referenceGroups : [];
+  const matchedGroups = [];
+  const seenIds = new Set();
+
+  associatedGroupNames.forEach((groupName) => {
+    const normalizedGroupName = normalizeComparisonValue(groupName);
+    const canonicalGroupName = normalizeCanonicalGroupKey(groupName);
+    const matchedGroup = groupRows.find((group) => {
+      const cachedName = normalizeComparisonValue(group?.name);
+      const cachedCanonicalName = normalizeCanonicalGroupKey(group?.name);
+
+      return cachedName === normalizedGroupName
+        || (canonicalGroupName && cachedCanonicalName === canonicalGroupName);
+    });
+
+    if (matchedGroup?.id && !seenIds.has(matchedGroup.id)) {
+      matchedGroups.push(matchedGroup);
+      seenIds.add(matchedGroup.id);
+    }
+  });
+
+  return matchedGroups;
 }
 
 function getUserLookupCandidates(ticket, columns) {
@@ -237,18 +269,15 @@ export function TicketDetail() {
           return;
         }
 
-        const associatedGroupTags = Array.isArray(responderRule?.associatedGroupTags)
-          ? responderRule.associatedGroupTags.map((tag) => normalizeLookupValue(tag).toLowerCase()).filter(Boolean)
-          : [];
-        const taggedGroups = (Array.isArray(referenceGroups) ? referenceGroups : []).filter((group) => {
-          const groupTags = normalizeTagList(group?.tags);
-          return associatedGroupTags.some((tag) => groupTags.includes(tag));
-        });
+        const associatedGroupNames = getAssociatedGroupNames(responderRule);
+        const taggedGroups = resolveTaggedGroups(referenceGroups, associatedGroupNames);
 
         if (!taggedGroups.length) {
           setResponderAccess({
             loading: false,
-            error: 'Responder tag found, but no cached tagged groups were found in reference groups.',
+            error: associatedGroupNames.length
+              ? `Responder tag found, but no cached groups matched: ${associatedGroupNames.join(', ')}.`
+              : 'Responder tag found, but no associated cached groups were configured for this rule.',
             userOpid: '',
             groups: [],
             taggedGroups: [],

@@ -2001,7 +2001,6 @@ textarea {
 
 .ticket-card-link:hover .ticket-card,
 .ticket-card-link:focus-visible .ticket-card {
-  transform: translateY(-2px);
   border-color: rgba(16, 185, 129, 0.28);
   box-shadow: var(--shadow-glow);
 }

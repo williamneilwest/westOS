@@ -1,35 +1,13 @@
 from flask import Blueprint, jsonify, request
 
 from ..models.reference import Group, SessionLocal, init_db
+from ..services.group_metadata import merge_group_tags
 from ..services.group_lookup import (
     get_user_groups_via_flow,
     lookup_groups,
     lookup_groups_via_flow,
     search_cached_groups,
 )
-
-
-def _normalize_tags(value):
-    if isinstance(value, list):
-        items = value
-    else:
-        items = str(value or '').replace('\n', ',').split(',')
-
-    normalized = []
-    seen = set()
-    for item in items:
-        tag = str(item or '').strip()
-        key = tag.lower()
-        if not tag or key in seen:
-            continue
-        normalized.append(tag)
-        seen.add(key)
-    return normalized
-
-
-def _merge_tags(existing_tags, incoming_tags):
-    merged = _normalize_tags(existing_tags) + _normalize_tags(incoming_tags)
-    return ', '.join(_normalize_tags(merged))
 
 
 group_cache_bp = Blueprint('group_cache', __name__)
@@ -89,7 +67,7 @@ def cache_groups():
                 if description and not (existing.description or '').strip():
                     existing.description = description
                     updated += 1
-                merged_tags = _merge_tags(existing.tags, tags)
+                merged_tags = ', '.join(merge_group_tags(existing.tags, tags, existing.name or name or gid))
                 if merged_tags != (existing.tags or ''):
                     existing.tags = merged_tags or None
                     updated += 1
@@ -99,7 +77,7 @@ def cache_groups():
                         id=gid,
                         name=name or gid,
                         description=description or None,
-                        tags=', '.join(_normalize_tags(tags)) or None,
+                        tags=', '.join(merge_group_tags('', tags, name or gid)) or None,
                     )
                 )
                 created += 1

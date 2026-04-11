@@ -1,7 +1,7 @@
 import base64
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
@@ -151,9 +151,18 @@ def list_uploads():
     files = []
 
     for name in sorted(os.listdir(UPLOAD_DIR), reverse=True):
+        file_path = os.path.join(UPLOAD_DIR, name)
+        modified_at = None
+
+        try:
+            modified_at = datetime.fromtimestamp(os.path.getmtime(file_path), tz=timezone.utc).isoformat()
+        except OSError:
+            modified_at = None
+
         files.append({
             "filename": name,
-            "url": f"/uploads/{name}"
+            "url": f"/uploads/{name}",
+            "modifiedAt": modified_at,
         })
 
     return jsonify(files)

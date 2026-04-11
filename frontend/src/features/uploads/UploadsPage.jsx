@@ -6,6 +6,25 @@ import { formatDataFileName } from '../../app/utils/fileDisplay';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
 
+function formatUploadTimestamp(value) {
+  if (!value) {
+    return 'Time unavailable';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Time unavailable';
+  }
+
+  return parsed.toLocaleString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export function UploadsPage() {
   const [files, setFiles] = useState([]);
   const [error, setError] = useState('');
@@ -49,6 +68,7 @@ export function UploadsPage() {
                   <FileSpreadsheet size={16} />
                   <span>
                     <strong>{formatDataFileName(file.filename)}</strong>
+                    <small>{formatUploadTimestamp(file.modifiedAt)}</small>
                   </span>
                 </span>
                 <div className="stack-row__actions">

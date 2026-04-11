@@ -90,6 +90,26 @@ function getContextTitle(pathname) {
   return 'westOS';
 }
 
+function getBackTarget(pathname) {
+  if (pathname.startsWith('/tickets/')) {
+    return '/app/work/active-tickets';
+  }
+
+  if (pathname.startsWith('/app/work/table')) {
+    return '/app/work';
+  }
+
+  if (pathname.startsWith('/app/')) {
+    return '/app/work';
+  }
+
+  if (pathname.startsWith('/readme')) {
+    return '/';
+  }
+
+  return '/';
+}
+
 function renderModuleLink(module) {
   if (module.external) {
     return (
@@ -125,6 +145,7 @@ export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const contextTitle = getContextTitle(location.pathname);
+  const backTarget = getBackTarget(location.pathname);
   const [expanded, setExpanded] = useState(false);
   const currentModule = modules.find((m) => location.pathname.startsWith(m.href));
 
@@ -209,7 +230,7 @@ export function AppShell() {
 
       <main className="shell__content">
         <header className="shell__topbar">
-          <NavLink to="/" className="shell__home-back" aria-label="Back to home">
+          <NavLink to={backTarget} className="shell__home-back" aria-label="Go back">
             <ArrowLeft size={14} />
           </NavLink>
           <h2 className="shell__context-title">{contextTitle}</h2>

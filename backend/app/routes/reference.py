@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from ..models.reference import Group, SessionLocal, User, init_db
+from ..services.group_metadata import merge_group_tags
 
 
 reference_bp = Blueprint('reference', __name__)
@@ -12,31 +13,6 @@ def _ensure_db():
     except Exception:
         # If DB init fails, handlers will still raise on use; we avoid failing import time
         pass
-
-
-def _normalize_tags(value):
-    if isinstance(value, list):
-        items = value
-    else:
-        items = str(value or '').replace('\n', ',').split(',')
-
-    normalized = []
-    seen = set()
-    for item in items:
-        tag = str(item or '').strip()
-        normalized_key = tag.lower()
-        if not tag or normalized_key in seen:
-            continue
-        normalized.append(tag)
-        seen.add(normalized_key)
-
-    return normalized
-
-
-def _merge_tags(existing_tags, incoming_tags):
-    merged = _normalize_tags(existing_tags) + _normalize_tags(incoming_tags)
-    return ', '.join(_normalize_tags(merged))
-
 
 @reference_bp.get('/api/reference/groups')
 def list_groups():
@@ -85,15 +61,16 @@ def upsert_groups():
                     existing.name = name
                 if description and not (existing.description or '').strip():
                     existing.description = description
-                if tags:
-                    existing.tags = _merge_tags(existing.tags, tags)
+                merged_tags = ', '.join(merge_group_tags(existing.tags, tags, existing.name or name or gid))
+                if merged_tags != (existing.tags or ''):
+                    existing.tags = merged_tags or None
             else:
                 session.add(
                     Group(
                         id=gid,
                         name=name or gid,
                         description=description or None,
-                        tags=', '.join(_normalize_tags(tags)) or None,
+                        tags=', '.join(merge_group_tags('', tags, name or gid)) or None,
                     )
                 )
 

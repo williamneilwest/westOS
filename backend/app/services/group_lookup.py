@@ -5,6 +5,7 @@ import requests
 from sqlalchemy import func
 
 from ..models.reference import Group, SessionLocal, init_db
+from .group_metadata import merge_group_tags, normalize_tags
 
 
 DEFAULT_SCRIPT_NAME = 'Search Groups'
@@ -57,31 +58,8 @@ def _normalize_group(item):
         'id': group_id,
         'name': name,
         'description': description,
-        'tags': _normalize_tags(tags),
+        'tags': normalize_tags(tags),
     }
-
-
-def _normalize_tags(value):
-    if isinstance(value, list):
-        items = value
-    else:
-        items = str(value or '').replace('\n', ',').split(',')
-
-    normalized = []
-    seen = set()
-    for item in items:
-        tag = str(item or '').strip()
-        key = tag.lower()
-        if not tag or key in seen:
-            continue
-        normalized.append(tag)
-        seen.add(key)
-    return normalized
-
-
-def _merge_tags(existing_tags, incoming_tags):
-    merged = _normalize_tags(existing_tags) + _normalize_tags(incoming_tags)
-    return _normalize_tags(merged)
 
 
 def _extract_groups(value):
@@ -198,7 +176,7 @@ def upsert_groups(groups):
                 if group['description'] and not (existing.description or '').strip():
                     existing.description = group['description']
                     updated += 1
-                merged_tags = ', '.join(_merge_tags(existing.tags, group['tags']))
+                merged_tags = ', '.join(merge_group_tags(existing.tags, group['tags'], existing.name or group['name'] or group['id']))
                 if merged_tags != (existing.tags or ''):
                     existing.tags = merged_tags or None
                     updated += 1
@@ -208,7 +186,7 @@ def upsert_groups(groups):
                         id=group['id'],
                         name=group['name'],
                         description=group['description'] or None,
-                        tags=', '.join(group['tags']) or None,
+                        tags=', '.join(merge_group_tags('', group['tags'], group['name'] or group['id'])) or None,
                     )
                 )
                 created += 1
