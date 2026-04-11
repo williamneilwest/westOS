@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import String, Column, create_engine, Text
+from sqlalchemy import String, Column, create_engine, inspect, text, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
@@ -17,6 +17,8 @@ class Group(Base):
 
     id = Column(String, primary_key=True)
     name = Column(String, nullable=False)
+    description = Column(Text)
+    tags = Column(Text)
 
 
 class User(Base):
@@ -41,6 +43,28 @@ class Endpoint(Base):
 def init_db():
     """Create tables if they do not exist yet."""
     Base.metadata.create_all(engine)
+    _ensure_reference_group_columns()
+
+
+def _ensure_reference_group_columns():
+    inspector = inspect(engine)
+    try:
+        columns = {column['name'] for column in inspector.get_columns('ref_groups')}
+    except Exception:
+        return
+
+    statements = []
+    if 'description' not in columns:
+        statements.append('ALTER TABLE ref_groups ADD COLUMN description TEXT')
+    if 'tags' not in columns:
+        statements.append('ALTER TABLE ref_groups ADD COLUMN tags TEXT')
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
 
 
 # Ensure tables exist when the module is imported (safe for SQLite/no-op if exists)

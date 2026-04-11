@@ -8,6 +8,7 @@ from ..models.reference import Group, SessionLocal, init_db
 
 
 DEFAULT_SCRIPT_NAME = 'Search Groups'
+DEFAULT_USER_GROUPS_SCRIPT_NAME = 'Get User Groups'
 DEFAULT_TIMEOUT_SECONDS = 20
 
 
@@ -36,6 +37,13 @@ def _normalize_group(item):
         or item.get('displayName')
         or ''
     ).strip()
+    description = str(
+        item.get('description')
+        or item.get('groupDescription')
+        or item.get('group_description')
+        or ''
+    ).strip()
+    tags = item.get('tags') or item.get('groupTags') or item.get('group_tags') or ''
 
     if not group_id and not name:
         return None
@@ -45,7 +53,35 @@ def _normalize_group(item):
     if not name:
         name = group_id
 
-    return {'id': group_id, 'name': name}
+    return {
+        'id': group_id,
+        'name': name,
+        'description': description,
+        'tags': _normalize_tags(tags),
+    }
+
+
+def _normalize_tags(value):
+    if isinstance(value, list):
+        items = value
+    else:
+        items = str(value or '').replace('\n', ',').split(',')
+
+    normalized = []
+    seen = set()
+    for item in items:
+        tag = str(item or '').strip()
+        key = tag.lower()
+        if not tag or key in seen:
+            continue
+        normalized.append(tag)
+        seen.add(key)
+    return normalized
+
+
+def _merge_tags(existing_tags, incoming_tags):
+    merged = _normalize_tags(existing_tags) + _normalize_tags(incoming_tags)
+    return _normalize_tags(merged)
 
 
 def _extract_groups(value):
@@ -84,6 +120,33 @@ def _extract_groups(value):
     return []
 
 
+def _extract_group_ids(value):
+    if isinstance(value, list):
+        group_ids = []
+        for item in value:
+          group_ids.extend(_extract_group_ids(item))
+        return group_ids
+
+    if isinstance(value, dict):
+        group_ids = []
+        for nested in value.values():
+            group_ids.extend(_extract_group_ids(nested))
+        return group_ids
+
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return [text]
+        return _extract_group_ids(parsed)
+
+    return []
+
+
 def search_cached_groups(search_text, limit=20):
     _ensure_db()
     query = (search_text or '').strip()
@@ -100,7 +163,15 @@ def search_cached_groups(search_text, limit=20):
             .limit(limit)
             .all()
         )
-        return [{'id': group.id, 'name': group.name} for group in results]
+        return [
+            {
+                'id': group.id,
+                'name': group.name,
+                'description': group.description or '',
+                'tags': group.tags or '',
+            }
+            for group in results
+        ]
     finally:
         session.close()
 
@@ -121,11 +192,25 @@ def upsert_groups(groups):
         for group in unique_groups.values():
             existing = session.get(Group, group['id'])
             if existing:
-                if group['name'] and existing.name != group['name']:
+                if group['name'] and not (existing.name or '').strip():
                     existing.name = group['name']
                     updated += 1
+                if group['description'] and not (existing.description or '').strip():
+                    existing.description = group['description']
+                    updated += 1
+                merged_tags = ', '.join(_merge_tags(existing.tags, group['tags']))
+                if merged_tags != (existing.tags or ''):
+                    existing.tags = merged_tags or None
+                    updated += 1
             else:
-                session.add(Group(id=group['id'], name=group['name']))
+                session.add(
+                    Group(
+                        id=group['id'],
+                        name=group['name'],
+                        description=group['description'] or None,
+                        tags=', '.join(group['tags']) or None,
+                    )
+                )
                 created += 1
 
         session.commit()
@@ -134,6 +219,71 @@ def upsert_groups(groups):
             'updated': updated,
             'total': created + updated,
             'items': list(unique_groups.values()),
+        }
+    finally:
+        session.close()
+
+
+def resolve_groups_by_ids(group_ids):
+    _ensure_db()
+    ordered_ids = []
+    seen_ids = set()
+
+    for raw_id in group_ids:
+        normalized_id = str(raw_id or '').strip().strip('"').strip("'").strip(',')
+        if not normalized_id or normalized_id in seen_ids:
+            continue
+        ordered_ids.append(normalized_id)
+        seen_ids.add(normalized_id)
+
+    if not ordered_ids:
+        return {
+            'items': [],
+            'identifiedCount': 0,
+            'totalCount': 0,
+            'created': 0,
+        }
+
+    session = SessionLocal()
+    try:
+        existing_groups = {
+            group.id: group
+            for group in session.query(Group).filter(Group.id.in_(ordered_ids)).all()
+        }
+
+        created = 0
+        items = []
+        identified_count = 0
+
+        for group_id in ordered_ids:
+            existing = existing_groups.get(group_id)
+            if existing:
+                name = existing.name or group_id
+                known = bool(existing.name and existing.name != group_id)
+                if known:
+                    identified_count += 1
+            else:
+                session.add(Group(id=group_id, name=group_id))
+                created += 1
+                name = group_id
+                known = False
+
+            items.append({
+                'id': group_id,
+                'name': name,
+                'description': existing.description if existing else '',
+                'tags': existing.tags if existing else '',
+                'identified': known,
+            })
+
+        if created:
+            session.commit()
+
+        return {
+            'items': items,
+            'identifiedCount': identified_count,
+            'totalCount': len(items),
+            'created': created,
         }
     finally:
         session.close()
@@ -204,3 +354,49 @@ def lookup_groups(search_text):
         }
 
     return lookup_groups_via_flow(query)
+
+
+def get_user_groups_via_flow(user_opid):
+    normalized_user_opid = str(user_opid or '').strip()
+    if not normalized_user_opid:
+        raise RuntimeError('user_opid is required')
+
+    flow_url = os.getenv('POWER_AUTOMATE_GROUP_SEARCH_URL', '').strip()
+    script_name = os.getenv('POWER_AUTOMATE_USER_GROUPS_SCRIPT_NAME', DEFAULT_USER_GROUPS_SCRIPT_NAME).strip() or DEFAULT_USER_GROUPS_SCRIPT_NAME
+    timeout = int(os.getenv('POWER_AUTOMATE_GROUP_TIMEOUT_SECONDS', str(DEFAULT_TIMEOUT_SECONDS)))
+
+    if not flow_url:
+        raise RuntimeError('POWER_AUTOMATE_GROUP_SEARCH_URL is not configured')
+
+    payload = {
+        'scriptName': script_name,
+        'variables': {
+            'user_opid': normalized_user_opid,
+        },
+    }
+
+    response = requests.post(
+        flow_url,
+        json=payload,
+        headers={'Content-Type': 'application/json'},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+
+    raw_text = response.text or ''
+    try:
+        parsed_body = response.json()
+    except ValueError:
+        parsed_body = raw_text
+
+    resolved = resolve_groups_by_ids(_extract_group_ids(parsed_body))
+
+    return {
+        'source': 'flow',
+        'userOpid': normalized_user_opid,
+        'items': resolved['items'],
+        'identifiedCount': resolved['identifiedCount'],
+        'totalCount': resolved['totalCount'],
+        'created': resolved['created'],
+        'raw': raw_text,
+    }

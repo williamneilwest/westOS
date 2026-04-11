@@ -1,7 +1,35 @@
 from flask import Blueprint, jsonify, request
 
 from ..models.reference import Group, SessionLocal, init_db
-from ..services.group_lookup import lookup_groups, lookup_groups_via_flow, search_cached_groups
+from ..services.group_lookup import (
+    get_user_groups_via_flow,
+    lookup_groups,
+    lookup_groups_via_flow,
+    search_cached_groups,
+)
+
+
+def _normalize_tags(value):
+    if isinstance(value, list):
+        items = value
+    else:
+        items = str(value or '').replace('\n', ',').split(',')
+
+    normalized = []
+    seen = set()
+    for item in items:
+        tag = str(item or '').strip()
+        key = tag.lower()
+        if not tag or key in seen:
+            continue
+        normalized.append(tag)
+        seen.add(key)
+    return normalized
+
+
+def _merge_tags(existing_tags, incoming_tags):
+    merged = _normalize_tags(existing_tags) + _normalize_tags(incoming_tags)
+    return ', '.join(_normalize_tags(merged))
 
 
 group_cache_bp = Blueprint('group_cache', __name__)
@@ -49,15 +77,31 @@ def cache_groups():
                 continue
 
             name = (item.get('name') or '').strip()
+            description = (item.get('description') or '').strip()
+            tags = item.get('tags') or ''
 
             existing = session.get(Group, gid)
             if existing:
-                # Update name only if changed and provided
-                if name and existing.name != name:
+                # Preserve curated cache values; only fill blank fields or merge tags.
+                if name and not (existing.name or '').strip():
                     existing.name = name
                     updated += 1
+                if description and not (existing.description or '').strip():
+                    existing.description = description
+                    updated += 1
+                merged_tags = _merge_tags(existing.tags, tags)
+                if merged_tags != (existing.tags or ''):
+                    existing.tags = merged_tags or None
+                    updated += 1
             else:
-                session.add(Group(id=gid, name=name or gid))
+                session.add(
+                    Group(
+                        id=gid,
+                        name=name or gid,
+                        description=description or None,
+                        tags=', '.join(_normalize_tags(tags)) or None,
+                    )
+                )
                 created += 1
 
         session.commit()
@@ -109,6 +153,22 @@ def lookup_groups_flow_api():
 
     try:
         result = lookup_groups_via_flow(q)
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 502
+
+    return jsonify({'success': True, **result})
+
+
+@group_cache_bp.get('/api/reference/groups/user-membership')
+def user_group_membership_api():
+    """Flow-backed lookup for all group IDs assigned to a user opid."""
+
+    user_opid = (request.args.get('user_opid') or '').strip()
+    if not user_opid:
+        return jsonify({'success': False, 'error': 'user_opid is required'}), 400
+
+    try:
+        result = get_user_groups_via_flow(user_opid)
     except Exception as exc:
         return jsonify({'success': False, 'error': str(exc)}), 502
 

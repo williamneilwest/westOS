@@ -85,6 +85,10 @@ export function lookupReferenceGroupsFromFlow(searchText) {
   return request(backendBaseUrl, `/api/reference/groups/lookup-flow?q=${encodeURIComponent(searchText)}`);
 }
 
+export function getUserGroups(userOpid) {
+  return request(backendBaseUrl, `/api/reference/groups/user-membership?user_opid=${encodeURIComponent(userOpid)}`);
+}
+
 export function getReferenceGroups() {
   return request(backendBaseUrl, '/api/reference/groups');
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Clock3, MessageSquareText, Sparkles, UserRound } from 'lucide-react';
+import { ArrowLeft, Clock3, MessageSquareText, ShieldCheck, ShieldX, Sparkles, UserRound } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { getTicket, sendAiChat } from '../../../app/services/api';
+import { getReferenceGroups, getReferenceUsers, getTicket, getUserGroups, sendAiChat } from '../../../app/services/api';
 import { Card, CardHeader } from '../../../app/ui/Card';
 import { EmptyState } from '../../../app/ui/EmptyState';
 import { getCachedWorkDataset, setCachedWorkDataset } from '../workDatasetCache';
@@ -18,6 +18,32 @@ import {
   parseTicketAiAnalysis,
   updateTicketAnalysis,
 } from '../utils/aiAnalysis';
+import { buildTicketRuleText, matchTicketRules } from '../utils/ticketRules';
+
+const USER_LOOKUP_PATTERNS = [
+  /opid/i,
+  /requested?_?for/i,
+  /opened_?by/i,
+  /caller/i,
+  /requester/i,
+  /employee_?id/i,
+  /user_?id/i,
+  /username/i,
+  /login/i,
+  /email/i,
+];
+const OPID_PATTERN = /^[a-z]{2,}[a-z0-9]{2,}$/i;
+function normalizeTagList(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeLookupValue(item).toLowerCase()).filter(Boolean);
+  }
+
+  return String(value ?? '')
+    .replace(/\n/g, ',')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 function buildMetadataEntries(ticket, columns) {
   const fieldMap = getTicketColumns(columns);
@@ -32,6 +58,61 @@ function buildMetadataEntries(ticket, columns) {
     .filter((item) => item.value && item.value !== 'Unknown');
 }
 
+function normalizeLookupValue(value) {
+  return String(value ?? '').trim();
+}
+
+function getUserLookupCandidates(ticket, columns) {
+  const values = [];
+
+  columns.forEach((column) => {
+    if (!USER_LOOKUP_PATTERNS.some((pattern) => pattern.test(column))) {
+      return;
+    }
+
+    const value = normalizeLookupValue(ticket?.[column]);
+    if (value) {
+      values.push(value);
+    }
+  });
+
+  const assignee = normalizeLookupValue(getTicketAssignee(ticket, columns));
+  if (assignee && assignee !== 'Unassigned') {
+    values.push(assignee);
+  }
+
+  return Array.from(new Set(values));
+}
+
+function resolveUserOpid(candidates, users) {
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeLookupValue(candidate).toLowerCase();
+    if (!normalizedCandidate) {
+      continue;
+    }
+
+    const matchedUser = users.find((user) => {
+      const userId = normalizeLookupValue(user?.id).toLowerCase();
+      const userName = normalizeLookupValue(user?.name).toLowerCase();
+      const userEmail = normalizeLookupValue(user?.email).toLowerCase();
+
+      return normalizedCandidate === userId
+        || normalizedCandidate === userName
+        || normalizedCandidate === userEmail;
+    });
+
+    if (matchedUser?.id) {
+      return matchedUser.id;
+    }
+
+    if (OPID_PATTERN.test(candidate) && !candidate.includes('@') && !candidate.includes(' ')) {
+      return candidate;
+    }
+  }
+
+  return '';
+}
+
 export function TicketDetail() {
   const { ticketId: routeTicketId = '' } = useParams();
   const decodedTicketId = decodeURIComponent(routeTicketId);
@@ -40,11 +121,35 @@ export function TicketDetail() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isLoadingTicket, setIsLoadingTicket] = useState(false);
+  const [responderAccess, setResponderAccess] = useState({
+    loading: false,
+    error: '',
+    userOpid: '',
+    groups: [],
+    taggedGroups: [],
+    hasResponderGroup: false,
+    matchedGroup: '',
+  });
 
   const ticket = useMemo(() => findTicketById(dataset, decodedTicketId), [dataset, decodedTicketId]);
   const columns = dataset?.columns || [];
   const notes = useMemo(() => (ticket ? getTicketNotes(ticket, columns) : []), [ticket, columns]);
   const metadataEntries = useMemo(() => (ticket ? buildMetadataEntries(ticket, columns) : []), [ticket, columns]);
+  const matchedRules = useMemo(() => {
+    if (!ticket) {
+      return [];
+    }
+
+    return matchTicketRules(buildTicketRuleText(ticket, columns));
+  }, [ticket, columns]);
+  const responderRule = useMemo(
+    () => matchedRules.find((rule) => rule.id === 'responder_group') || null,
+    [matchedRules]
+  );
+  const userLookupCandidates = useMemo(
+    () => (ticket ? getUserLookupCandidates(ticket, columns) : []),
+    [ticket, columns]
+  );
   const parsedAnalysis = useMemo(
     () => parseTicketAiAnalysis(analysisResult),
     [analysisResult]
@@ -98,6 +203,116 @@ export function TicketDetail() {
       isMounted = false;
     };
   }, [decodedTicketId, ticket]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadResponderAccess() {
+      if (!ticket || !responderRule) {
+        setResponderAccess({
+          loading: false,
+          error: '',
+          userOpid: '',
+          groups: [],
+          taggedGroups: [],
+          hasResponderGroup: false,
+          matchedGroup: '',
+        });
+        return;
+      }
+
+      setResponderAccess((current) => ({
+        ...current,
+        loading: true,
+        error: '',
+        groups: [],
+        taggedGroups: [],
+        hasResponderGroup: false,
+        matchedGroup: '',
+      }));
+
+      try {
+        const [users, referenceGroups] = await Promise.all([getReferenceUsers(), getReferenceGroups()]);
+        if (!isMounted) {
+          return;
+        }
+
+        const associatedGroupTags = Array.isArray(responderRule?.associatedGroupTags)
+          ? responderRule.associatedGroupTags.map((tag) => normalizeLookupValue(tag).toLowerCase()).filter(Boolean)
+          : [];
+        const taggedGroups = (Array.isArray(referenceGroups) ? referenceGroups : []).filter((group) => {
+          const groupTags = normalizeTagList(group?.tags);
+          return associatedGroupTags.some((tag) => groupTags.includes(tag));
+        });
+
+        if (!taggedGroups.length) {
+          setResponderAccess({
+            loading: false,
+            error: 'Responder tag found, but no cached tagged groups were found in reference groups.',
+            userOpid: '',
+            groups: [],
+            taggedGroups: [],
+            hasResponderGroup: false,
+            matchedGroup: '',
+          });
+          return;
+        }
+
+        const resolvedUserOpid = resolveUserOpid(userLookupCandidates, Array.isArray(users) ? users : []);
+        if (!resolvedUserOpid) {
+          setResponderAccess({
+            loading: false,
+            error: 'Responder tag found, but no ticket user could be resolved to an OPID.',
+            userOpid: '',
+            groups: [],
+            taggedGroups,
+            hasResponderGroup: false,
+            matchedGroup: '',
+          });
+          return;
+        }
+
+        const response = await getUserGroups(resolvedUserOpid);
+        if (!isMounted) {
+          return;
+        }
+
+        const groups = Array.isArray(response?.items) ? response.items : [];
+        const taggedGroupIds = new Set(taggedGroups.map((group) => normalizeLookupValue(group?.id)).filter(Boolean));
+        const matchedGroup = groups.find((group) => taggedGroupIds.has(normalizeLookupValue(group?.id)));
+
+        setResponderAccess({
+          loading: false,
+          error: '',
+          userOpid: resolvedUserOpid,
+          groups,
+          taggedGroups,
+          hasResponderGroup: Boolean(matchedGroup),
+          matchedGroup: matchedGroup?.name || matchedGroup?.id || '',
+        });
+      } catch (requestError) {
+        if (!isMounted) {
+          return;
+        }
+
+        setResponderAccess({
+          loading: false,
+          error: requestError.message || 'Responder access check failed.',
+          userOpid: '',
+          groups: [],
+          taggedGroups: [],
+          hasResponderGroup: false,
+          matchedGroup: '',
+        });
+      }
+    }
+
+    void loadResponderAccess();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [ticket, responderRule, userLookupCandidates]);
 
   async function runAnalysis() {
     if (!ticket) {
@@ -184,6 +399,55 @@ export function TicketDetail() {
           Back to Active Tickets
         </Link>
       </div>
+
+      {responderRule ? (
+        <Card className="ticket-tag-banner">
+          <CardHeader
+            eyebrow="Tag Detected"
+            title="Tagged with Responder"
+            description={responderRule.suggestion}
+            action={
+              responderAccess.hasResponderGroup ? (
+                <span className="ticket-tag-banner__icon ticket-tag-banner__icon--success">
+                  <ShieldCheck size={16} />
+                </span>
+              ) : (
+                <span className="ticket-tag-banner__icon ticket-tag-banner__icon--warning">
+                  <ShieldX size={16} />
+                </span>
+              )
+            }
+          />
+
+          <div className="ticket-tag-banner__content">
+            <div className="ticket-source-banner ticket-source-banner--compact">
+              <span className="ticket-source-banner__pill">Responder</span>
+              <span>
+                {responderAccess.userOpid
+                  ? `Resolved user OPID: ${responderAccess.userOpid}`
+                  : userLookupCandidates.length
+                    ? `Ticket user candidates: ${userLookupCandidates.join(', ')}`
+                    : 'No ticket user fields were detected.'}
+              </span>
+              {responderAccess.taggedGroups.length ? (
+                <span>
+                  {`Tagged groups: ${responderAccess.taggedGroups.map((group) => `${group.name || group.id} (${group.id})`).join(', ')}`}
+                </span>
+              ) : null}
+            </div>
+
+            {responderAccess.loading ? <p className="status-text">Checking responder group access...</p> : null}
+            {responderAccess.error ? <p className="status-text status-text--error">{responderAccess.error}</p> : null}
+            {!responderAccess.loading && !responderAccess.error && responderAccess.userOpid ? (
+              <p className="ticket-tag-banner__status">
+                {responderAccess.hasResponderGroup
+                  ? `Success. User has a tagged group${responderAccess.matchedGroup ? `: ${responderAccess.matchedGroup}` : ''}.`
+                  : 'No tagged group IDs were found in the returned user group list.'}
+              </p>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
 
       {(loading || analysisResult || error) ? (
         <Card className="ticket-summary-popup">

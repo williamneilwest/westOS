@@ -1,4 +1,4 @@
-import { BarChart3, FileSpreadsheet, Mail, Search, UsersRound } from 'lucide-react';
+import { BarChart3, FileSpreadsheet, Mail, Search, Users, UsersRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { SectionHeader } from '../../app/ui/SectionHeader';
@@ -39,6 +39,13 @@ const workModules = [
     icon: Search,
     cta: 'Open Group Search',
   },
+  {
+    title: 'Get User Groups',
+    description: 'Call the Power Automate user-group flow with an OPID, resolve known group names from cache, and store unknown IDs in the group table.',
+    href: '/app/work/get-user-groups',
+    icon: Users,
+    cta: 'Open User Groups',
+  },
 ];
 
 export function WorkHubPage() {
@@ -47,7 +54,7 @@ export function WorkHubPage() {
       <SectionHeader
         tag="/app/work"
         title="Work Hub"
-        description="Central routing for work-related tools. Open the ticket workspace, inspect AI metrics, search groups, generate user-group association scripts, or review archived inbound uploads."
+        description="Central routing for work-related tools. Open the ticket workspace, inspect AI metrics, search groups, resolve user group memberships, generate user-group association scripts, or review archived inbound uploads."
       />
 
       <div className="card-grid">

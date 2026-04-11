@@ -71,7 +71,13 @@ export function ReferencePage() {
               <button
                 type="button"
                 className="compact-toggle"
-                onClick={() => openCachedTable({ fileName: 'Reference Groups', rows: groups, columns: ['id', 'name'] })}
+                onClick={() =>
+                  openCachedTable({
+                    fileName: 'Reference Groups',
+                    rows: groups,
+                    columns: ['id', 'name', 'description', 'tags']
+                  })
+                }
                 disabled={!groups.length}
               >
                 Open Table
@@ -90,6 +96,8 @@ export function ReferencePage() {
                   <tr>
                     <th>ID</th>
                     <th>Name</th>
+                    <th>Description</th>
+                    <th>Tags</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -103,6 +111,16 @@ export function ReferencePage() {
                       <td>
                         <span className="data-table__cell-content" title={g.name}>
                           {g.name || '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="data-table__cell-content" title={g.description}>
+                          {g.description || '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="data-table__cell-content" title={g.tags}>
+                          {g.tags || '—'}
                         </span>
                       </td>
                     </tr>

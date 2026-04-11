@@ -4,6 +4,7 @@ import { ReadmePage } from '../features/readme/ReadmePage';
 import { AISettingsPage } from '../features/settings/AISettingsPage';
 import { TablePage } from '../features/tables/TablePage';
 import { WorkPage } from '../features/work/WorkPage';
+import { GetUserGroupsPage } from '../features/work/GetUserGroupsPage';
 import { GroupSearchToolPage } from '../features/work/GroupSearchToolPage';
 import { TicketDetail } from '../features/work/pages/TicketDetail';
 import { WorkInsightsPage } from '../features/work/WorkInsightsPage';
@@ -100,6 +101,10 @@ export const router = createBrowserRouter([
         Component: GroupSearchToolPage
       },
       {
+        path: 'work/get-user-groups',
+        Component: GetUserGroupsPage
+      },
+      {
         path: 'work/user-group-association',
         Component: UserGroupAssociationPage
       },
@@ -128,6 +133,10 @@ export const router = createBrowserRouter([
   {
     path: '/work/group-search',
     element: <Navigate replace to="/app/work/group-search" />
+  },
+  {
+    path: '/work/get-user-groups',
+    element: <Navigate replace to="/app/work/get-user-groups" />
   },
   {
     path: '/work/user-group-association',

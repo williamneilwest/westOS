@@ -39,6 +39,10 @@ function getContextTitle(pathname) {
     return 'Work / Group Search';
   }
 
+  if (pathname.startsWith('/app/work/get-user-groups')) {
+    return 'Work / Get User Groups';
+  }
+
   if (pathname.startsWith('/app/work/user-group-association')) {
     return 'Work / User-Group Association';
   }
