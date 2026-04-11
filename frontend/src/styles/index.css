@@ -750,7 +750,14 @@ textarea {
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 20%),
     var(--bg-panel);
 }
+.ticket-summary-popup__content::-webkit-scrollbar {
+  width: 6px;
+}
 
+.ticket-summary-popup__content::-webkit-scrollbar-thumb {
+  background: rgba(34, 197, 94, 0.6);
+  border-radius: 4px;
+}
 .ui-card--emerald {
   background:
     radial-gradient(circle at top right, rgba(34, 197, 94, 0.14), transparent 34%),
