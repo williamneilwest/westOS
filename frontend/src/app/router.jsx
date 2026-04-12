@@ -13,11 +13,13 @@ import { TicketDetail } from '../features/work/pages/TicketDetail';
 import { WorkInsightsPage } from '../features/work/WorkInsightsPage';
 import { UserGroupAssociationPage } from '../features/work/UserGroupAssociationPage';
 import { ConsoleEndpointsPage } from '../features/console/ConsoleEndpointsPage';
+import { ConsolePage } from '../features/console/ConsolePage';
 import { SystemViewerPage } from '../features/system/SystemViewerPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { AppShell } from './shell/AppShell';
 import { isWorkDomainHost } from './constants/domain';
 import { RequireAuth } from './router/RequireAuth';
+import { RequireAdmin } from './router/RequireAdmin';
 
 const routeModules = import.meta.glob('../features/*/routes.jsx');
 const missingRoute = async () => ({ Component: () => null });
@@ -78,15 +80,15 @@ export const router = createBrowserRouter(
         path: 'console',
         ...(isWorkSubdomain
           ? { element: workRedirect }
-          : { lazy: getRoute('../features/console/routes.jsx') })
+          : { element: <RequireAdmin><ConsolePage /></RequireAdmin> })
       },
       {
         path: 'system',
-        element: isWorkSubdomain ? workRedirect : <SystemViewerPage />
+        element: isWorkSubdomain ? workRedirect : <RequireAdmin><SystemViewerPage /></RequireAdmin>
       },
       {
         path: 'console/endpoints',
-        element: isWorkSubdomain ? workRedirect : <ConsoleEndpointsPage />
+        element: isWorkSubdomain ? workRedirect : <RequireAdmin><ConsoleEndpointsPage /></RequireAdmin>
       },
       {
         path: 'settings',

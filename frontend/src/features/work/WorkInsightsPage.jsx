@@ -3,9 +3,10 @@ import { AlertTriangle, Clock3, FolderKanban, MessageSquareText, Tags, UserRound
 import { useLocation } from 'react-router-dom';
 import { useBackNavigation } from '../../app/hooks/useBackNavigation';
 import { chatAI } from '../../app/services/aiClient';
+import { getLatestTickets } from '../../app/services/api';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { SectionHeader } from '../../app/ui/SectionHeader';
-import { getCachedAiMetricSummary, getCachedWorkDataset, setCachedAiMetricSummary } from './workDatasetCache';
+import { getCachedAiMetricSummary, getCachedWorkDataset, setCachedAiMetricSummary, setCachedWorkDataset } from './workDatasetCache';
 import { buildInsights } from './workInsightsMetrics';
 
 function MetricTile({ label, value, detail }) {
@@ -42,7 +43,8 @@ export function WorkInsightsPage() {
   const location = useLocation();
   const goBack = useBackNavigation('/app/work/active-tickets');
   const backLabel = location.state?.label || 'Active Tickets';
-  const dataset = getCachedWorkDataset();
+  const [dataset, setDataset] = useState(() => getCachedWorkDataset());
+  const [isDatasetLoading, setIsDatasetLoading] = useState(false);
   const insights = useMemo(() => (dataset?.rows?.length ? buildInsights(dataset) : null), [dataset]);
   const summaryCacheKey = dataset?.analysisId || dataset?.fileName || '';
   const [aiSummary, setAiSummary] = useState(() => getCachedAiMetricSummary(summaryCacheKey));
@@ -53,6 +55,52 @@ export function WorkInsightsPage() {
     setAiSummary(getCachedAiMetricSummary(summaryCacheKey));
     setSummaryError('');
   }, [summaryCacheKey]);
+
+  useEffect(() => {
+    if (dataset?.rows?.length) {
+      return;
+    }
+
+    let active = true;
+
+    async function hydrateFromActiveTickets() {
+      setIsDatasetLoading(true);
+      try {
+        const payload = await getLatestTickets();
+        if (!active) {
+          return;
+        }
+
+        const latestTicketsPayload = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+        const columns = Array.isArray(latestTicketsPayload?.columns) ? latestTicketsPayload.columns : [];
+        const rows = Array.isArray(latestTicketsPayload?.tickets) ? latestTicketsPayload.tickets : [];
+        if (!rows.length) {
+          return;
+        }
+
+        const nextDataset = {
+          fileName: String(latestTicketsPayload?.fileName || 'ActiveTicketsLAH.csv').trim() || 'ActiveTicketsLAH.csv',
+          columns,
+          rows,
+        };
+
+        setDataset(nextDataset);
+        setCachedWorkDataset(nextDataset);
+      } catch {
+        // Keep empty fallback UI.
+      } finally {
+        if (active) {
+          setIsDatasetLoading(false);
+        }
+      }
+    }
+
+    void hydrateFromActiveTickets();
+
+    return () => {
+      active = false;
+    };
+  }, [dataset]);
 
   async function handleGenerateSummary() {
     if (!dataset?.rows?.length || !insights || !summaryCacheKey) {
@@ -82,6 +130,19 @@ export function WorkInsightsPage() {
     }
   }
 
+  if (isDatasetLoading) {
+    return (
+      <section className="module">
+        <SectionHeader
+          tag="/app/work/ai-metrics"
+          title="AI Metrics"
+          description="Advanced ticket metrics from the current active tickets dataset."
+        />
+        <p className="status-text">Loading active ticket metrics...</p>
+      </section>
+    );
+  }
+
   if (!dataset?.rows?.length) {
     return (
       <section className="module">
@@ -94,7 +155,7 @@ export function WorkInsightsPage() {
           <EmptyState
             icon={<FolderKanban size={20} />}
             title="Full dataset not loaded"
-            description="Upload and analyze a CSV from the Work page first to build advanced insights from the full dataset."
+            description="No active ticket dataset is available yet."
           />
           <button className="ui-button ui-button--secondary" onClick={goBack} type="button">
             {`Back to ${backLabel}`}

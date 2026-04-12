@@ -34,6 +34,30 @@ WORK_ALLOWED_PREFIXES = (
     '/api/files',
 )
 PUBLIC_AUTH_PATH_PREFIX = '/api/auth/'
+PUBLIC_WORK_VIEW_PREFIXES = (
+    '/api/tickets',
+    '/uploads',
+    '/api/uploads',
+    '/api/kb',
+    '/kb',
+    '/flows/work/recent-analyses',
+)
+AUTH_REQUIRED_PREFIXES = (
+    '/api/data/',
+    '/api/ai/',
+    '/api/work/run',
+    '/flows/work/analyze-csv',
+    '/api/work/analyze-csv',
+    '/api/email/upload',
+)
+ADMIN_ONLY_PREFIXES = (
+    '/api/system/',
+    '/api/console/',
+    '/api/logs',
+    '/api/services',
+    '/api/reference/users',
+    '/api/reference/endpoints/sync',
+)
 
 
 def _normalize_host(raw_host):
@@ -57,6 +81,13 @@ def _is_work_domain_request(app, host):
 
 def _is_public_non_work_path(request_path):
     return request_path == '/health' or request_path.startswith(PUBLIC_AUTH_PATH_PREFIX)
+
+
+def _is_public_work_view_path(request_path, method):
+    http_method = str(method or 'GET').upper()
+    if http_method not in {'GET', 'HEAD'}:
+        return False
+    return _path_matches_prefixes(request_path, PUBLIC_WORK_VIEW_PREFIXES)
 
 
 def _log_guard_decision(app, *, host, path, guard, action, reason):
@@ -203,11 +234,54 @@ def create_app():
 
     @app.before_request
     def enforce_non_work_authentication():
+        from .services.authz import require_auth, require_role
+
         host = _normalize_host(request.host)
+        request_path = _normalize_path(request.path)
+        if request.method == 'OPTIONS':
+            return None
+
+        if _path_matches_prefixes(request_path, ADMIN_ONLY_PREFIXES):
+            auth_error = require_auth()
+            if auth_error is not None:
+                _log_guard_decision(
+                    app,
+                    host=host,
+                    path=request_path,
+                    guard='rbac_auth_guard',
+                    action='block',
+                    reason='admin_path_requires_auth',
+                )
+                return auth_error
+
+            role_error = require_role('admin')
+            if role_error is not None:
+                _log_guard_decision(
+                    app,
+                    host=host,
+                    path=request_path,
+                    guard='rbac_role_guard',
+                    action='block',
+                    reason='admin_role_required',
+                )
+                return role_error
+
+        elif _path_matches_prefixes(request_path, AUTH_REQUIRED_PREFIXES):
+            auth_error = require_auth()
+            if auth_error is not None:
+                _log_guard_decision(
+                    app,
+                    host=host,
+                    path=request_path,
+                    guard='rbac_auth_guard',
+                    action='block',
+                    reason='execution_path_requires_auth',
+                )
+                return auth_error
+
         if _is_work_domain_request(app, host):
             return None
 
-        request_path = _normalize_path(request.path)
         if _is_public_non_work_path(request_path):
             _log_guard_decision(
                 app,
@@ -216,6 +290,17 @@ def create_app():
                 guard='non_work_auth_guard',
                 action='allow',
                 reason='public_path',
+            )
+            return None
+
+        if _is_public_work_view_path(request_path, request.method):
+            _log_guard_decision(
+                app,
+                host=host,
+                path=request_path,
+                guard='non_work_auth_guard',
+                action='allow',
+                reason='public_work_view',
             )
             return None
 

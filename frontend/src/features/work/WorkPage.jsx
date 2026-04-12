@@ -34,6 +34,7 @@ import {
   rowMatchesGlobalSearch,
 } from '../../components/dataset/utils';
 import { DatasetPage } from '../../pages/dataset/DatasetPage';
+import { useCurrentUser } from '../../app/hooks/useCurrentUser';
 import { getCachedWorkDataset, parseCsvText, setCachedWorkDataset } from './workDatasetCache';
 import { dedupeNotes, getTicketAssignee, getTicketColumns, getTicketId, isSuppressedTicketColumn } from './utils/aiAnalysis';
 import { buildTicketRuleText, collectKbTagWordsFromKnowledgeBase, matchTicketRules } from './utils/ticketRules';
@@ -357,6 +358,7 @@ function matchesColumnFilter(value, columnType, filter = {}) {
 }
 
 export function WorkPage() {
+  const { authenticated } = useCurrentUser();
   const navigate = useNavigate();
   const location = useLocation();
   const isActiveTicketsRoute = location.pathname.startsWith('/app/work/active-tickets');
@@ -1133,7 +1135,8 @@ export function WorkPage() {
                 </button>
                 <button
                   className="compact-toggle"
-                  disabled={!analysis || loadingAI || isLoadingSavedRun}
+                  disabled={!analysis || loadingAI || isLoadingSavedRun || !authenticated}
+                  title={!authenticated ? 'Sign in to use this feature' : ''}
                   onClick={handleAiAnalysis}
                   type="button"
                 >
@@ -1168,6 +1171,8 @@ export function WorkPage() {
                 </div>
               </>
             )}
+            uploadDisabled={!authenticated}
+            uploadDisabledReason="Sign in to use this feature"
           >
             <section className="analysis-grid">
               <Card className="analysis-grid__wide">

@@ -745,6 +745,121 @@ textarea {
   font-size: 0.72rem;
 }
 
+.shell-user-panel {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.45rem 0.55rem;
+}
+
+.shell-user-panel__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  width: 100%;
+  cursor: pointer;
+}
+
+.shell-user-panel__identity {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.shell-user-panel__username {
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-user-panel__role {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid transparent;
+}
+
+.shell-user-panel__role--admin {
+  background: rgba(217, 70, 239, 0.15);
+  border-color: rgba(217, 70, 239, 0.35);
+  color: #f5d0fe;
+}
+
+.shell-user-panel__role--user {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #bbf7d0;
+}
+
+.shell-user-panel__role--guest {
+  background: rgba(148, 163, 184, 0.16);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: #cbd5e1;
+}
+
+.shell-user-panel__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-soft);
+}
+
+.shell-user-panel__expand {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: max-height 180ms ease, opacity 180ms ease, transform 180ms ease;
+}
+
+.shell-user-panel__expand--open {
+  max-height: 20rem;
+  opacity: 1;
+  transform: translateY(0);
+  margin-top: 0.45rem;
+}
+
+.shell-user-panel__section {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.45rem;
+}
+
+.shell-user-panel__section:last-child {
+  margin-bottom: 0;
+}
+
+.shell-user-panel__section p,
+.shell-user-panel__section strong,
+.shell-user-panel__section li {
+  font-size: 0.72rem;
+}
+
+.shell-user-panel__section p,
+.shell-user-panel__section li {
+  color: var(--text-soft);
+}
+
+.shell-user-panel__section ul {
+  list-style: disc;
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.shell-user-panel__section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text);
+}
+
 .shell__hero-action {
   width: 100%;
   justify-content: center;

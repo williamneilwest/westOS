@@ -14,10 +14,11 @@ import { isWorkDomainHost } from '../constants/domain';
 import { storage } from '../utils/storage';
 import { modules } from './modules';
 import { AssistantPopover } from '../../features/ai/components/AssistantPopover';
+import { useCurrentUser } from '../hooks/useCurrentUser';
+import { UserPanel } from '../../features/auth/UserPanel';
 
 const NAV_LAST_USED_KEY = 'westos.nav.lastUsed';
 const NAV_LAST_USED_MAP_KEY = 'westos.nav.lastUsedMap';
-const WORK_HUB_ACTIVITY_KEY = 'westos.work.lastHubActivity';
 const NAV_GROUPS = [
   { label: 'Workspace', hrefs: ['/app/life', '/app/work', '/app/data'] },
   { label: 'Intelligence', hrefs: ['/app/ai', '/app/kb'] },
@@ -263,12 +264,19 @@ export function AppShell() {
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(max-width: 720px)').matches : false
   );
+  const { authenticated, isAdmin } = useCurrentUser();
   const visibleModules = useMemo(() => {
     if (!isWorkDomain) {
-      return modules;
+      const roleFiltered = modules.filter((module) => {
+        if (module.href === '/app/system' || module.href === '/app/console') {
+          return isAdmin;
+        }
+        return true;
+      });
+      return roleFiltered;
     }
     return modules.filter((module) => module.href === '/app/work');
-  }, [isWorkDomain]);
+  }, [isAdmin, isWorkDomain]);
 
   const currentModule = visibleModules.find((m) => location.pathname.startsWith(m.href));
 
@@ -300,13 +308,13 @@ export function AppShell() {
             { href: '/app/uploads', label: 'Upload File' },
           ],
         },
-        {
+        ...(isAdmin ? [{
           label: 'System actions',
           actions: [{ href: '/app/console', label: 'View Logs' }],
-        },
+        }] : []),
       ];
     },
-    [isWorkDomain]
+    [isAdmin, isWorkDomain]
   );
 
   const recommendedHref = lastUsedModule?.href || '/app/work';
@@ -456,11 +464,6 @@ export function AppShell() {
     };
   }, []);
 
-  const recentWorkActivity = storage.get(WORK_HUB_ACTIVITY_KEY);
-  const recentTicketRun = storage.get(STORAGE_KEYS.FULL_DATASET, { session: true });
-  const recentAiSummary = storage.get(STORAGE_KEYS.AI_SUMMARIES, { session: true });
-  const lastAiRunKey = recentAiSummary && typeof recentAiSummary === 'object' ? Object.keys(recentAiSummary).at(-1) : '';
-
   return (
     <div className="shell">
       <aside className="shell__sidebar">
@@ -496,9 +499,11 @@ export function AppShell() {
             <div className={`shell__hero-status shell__hero-status--${systemHealth.level}`}>
               <span>{systemHealth.text}</span>
             </div>
-            <NavLink className="ui-button ui-button--secondary shell__hero-action" to="/app/console">
-              Open Console
-            </NavLink>
+            {isAdmin ? (
+              <NavLink className="ui-button ui-button--secondary shell__hero-action" to="/app/console">
+                Open Console
+              </NavLink>
+            ) : null}
 
             <div className="shell__quick-actions" role="navigation" aria-label="Quick actions">
               {quickActionGroups.map((group) => (
@@ -544,11 +549,7 @@ export function AppShell() {
         </nav>
 
         <div className="shell__sidebar-footer">
-          <div className="shell__recent">
-            <small>{`Last activity: ${recentWorkActivity?.title || 'None'}`}</small>
-            <small>{`Last ticket run: ${recentTicketRun?.fileName || 'None'}`}</small>
-            <small>{`Last AI analysis: ${lastAiRunKey || 'None'}`}</small>
-          </div>
+          <UserPanel />
         </div>
       </aside>
 
@@ -590,7 +591,7 @@ export function AppShell() {
                   {location.pathname.startsWith('/app/kb/processed') ? 'Knowledge Base' : 'Processed KB'}
                 </NavLink>
               ) : null}
-              {isWorkDomain ? null : <AssistantPopover />}
+              {isWorkDomain || !authenticated ? null : <AssistantPopover />}
             </div>
           </div>
         </header>
