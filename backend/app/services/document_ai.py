@@ -11,45 +11,125 @@ from .settings_store import get_ai_model
 
 
 LOGGER = logging.getLogger(__name__)
-PROMPT_TEMPLATE = """You are analyzing an operational support/IT document.
+PROMPT_TEMPLATE = """You are a document intelligence engine.
 
-Return a comprehensive plain-text analysis with these sections in order:
+Your job is to analyze a knowledge base document and return STRICT, VALID JSON only. Do NOT return explanations, markdown, or text outside the JSON.
 
-Quick Summary:
-- 5-8 bullets with concrete facts from the document.
+---
 
-Full Analysis:
-1) Purpose and scope
-- Explain what this document is for and who should use it.
+## OUTPUT REQUIREMENTS
 
-2) Critical details extracted
-- Include systems, users, groups, permissions, dependencies, constraints, deadlines, and environments.
-- Include exact identifiers when present (ticket IDs, hostnames, URLs, group names, commands, file paths).
+Return a single JSON object with the following structure:
 
-3) Procedure breakdown
-- Reconstruct the step-by-step process from the document.
-- Flag missing prerequisites or ambiguous steps.
+{{
+"title": string,
+"category": string,
+"summary": string[],
+"purpose": string,
+"systems": string[],
+"users": string[],
+"access": {{
+"ad_group": string | null,
+"approval_required": boolean,
+"approval_type": string | null,
+"estimated_time": string | null
+}},
+"steps": string[],
+"risks": [
+{{
+"issue": string,
+"severity": "low" | "medium" | "high",
+"mitigation": string
+}}
+],
+"validation": string[],
+"missing_info": string[],
+"tags": string[],
+"search_keywords": string[],
+"automation": {{
+"can_auto_request": boolean,
+"can_track_ticket": boolean,
+"requires_human_approval": boolean
+}}
+}}
 
-4) Risks and failure points
-- List likely errors, hidden assumptions, and operational risks.
-- Include severity (high/medium/low) per risk.
+---
 
-5) Validation checklist
-- Provide explicit checks to confirm successful execution.
+## STRICT RULES
 
-6) Recommended follow-ups
-- Provide concrete next actions and suggested improvements.
+1. NEVER return large paragraph blobs.
 
-Requirements:
-- Be specific and evidence-based from the provided content.
-- Prefer complete coverage over brevity.
-- Do not output JSON.
-- Do not use markdown code fences.
+   * Break everything into arrays or short strings.
+
+2. summary:
+
+   * 4–8 concise bullet-style strings
+   * Max 12 words each
+
+3. steps:
+
+   * Ordered, actionable, one step per string
+
+4. systems:
+
+   * Extract real system names (e.g., ServiceNow, Active Directory)
+
+5. users:
+
+   * Who this applies to (e.g., employees, admins)
+
+6. access:
+
+   * Extract AD group if present
+   * If not present → null
+   * approval_required must be true if any approval is mentioned
+
+7. risks:
+
+   * Convert vague risks into actionable issues + mitigation
+   * Always include at least 2 if possible
+
+8. missing_info:
+
+   * ONLY include if explicitly unclear or missing in document
+   * Do NOT guess
+
+9. tags:
+
+   * Lowercase
+   * 1–2 word max each
+   * Examples: "chatgpt", "access", "servicenow", "ad-group"
+
+10. search_keywords:
+
+* 3–6 phrases someone would search
+* Natural language (not tags)
+
+11. automation:
+
+* can_auto_request = true if request process exists
+* can_track_ticket = true if ticketing system is used
+* requires_human_approval = true if approval required
+
+12. If a value is unknown:
+
+* Use null (NOT empty string, NOT guess)
+
+13. Output must be VALID JSON (no trailing commas)
+
+---
+
+## GOAL
+
+Convert unstructured documentation into structured, queryable, automation-ready data for a knowledge system and AI agent.
+
+---
+
+## INPUT DOCUMENT
 
 Filename: {filename}
 
-Document text:
-{text}
+{{document_text}}
 """
 
 
@@ -140,7 +220,7 @@ def analyze_document(text, filename):
 
     prompt = PROMPT_TEMPLATE.format(
         filename=Path(filename or '').name,
-        text=truncated_text,
+        document_text=truncated_text,
     )
 
     document_model = get_ai_model(mode='document_processing')
