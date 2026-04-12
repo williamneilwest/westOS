@@ -1,14 +1,20 @@
 import base64
 import json
 import os
+import re
 from datetime import datetime, timezone
+import logging
 
 from flask import Blueprint, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
 email_upload_bp = Blueprint("email_upload", __name__)
 
-UPLOAD_DIR = "/app/data/uploads"
+LOGGER = logging.getLogger(__name__)
+DATA_ROOT = "/app/data"
+UPLOAD_DIR = os.path.join(DATA_ROOT, "uploads")
+KB_DIR = os.path.join(DATA_ROOT, "kb")
+KB_UNCATEGORIZED_DIR = os.path.join(KB_DIR, "uncategorized")
 MAX_ATTACHMENT_BYTES = int(os.getenv('MAX_EMAIL_ATTACHMENT_BYTES', str(10 * 1024 * 1024)))
 ALLOWED_ATTACHMENT_EXTENSIONS = {
     extension.strip().lower()
@@ -19,10 +25,16 @@ ALLOWED_ATTACHMENT_EXTENSIONS = {
     if extension.strip()
 }
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(KB_DIR, exist_ok=True)
+os.makedirs(KB_UNCATEGORIZED_DIR, exist_ok=True)
 
 
 def _metadata_path(filename):
     return os.path.join(UPLOAD_DIR, f'{filename}.meta.json')
+
+
+def _metadata_path_for_directory(directory, filename):
+    return os.path.join(directory, f'{filename}.meta.json')
 
 
 def _write_upload_metadata(filename, source):
@@ -34,8 +46,34 @@ def _write_upload_metadata(filename, source):
         json.dump(payload, handle)
 
 
+def _write_upload_metadata_for_directory(directory, filename, source, recipient=None, route='uploads'):
+    payload = {
+        'source': source or 'manual',
+        'route': route or 'uploads',
+    }
+
+    if recipient:
+        payload['recipient'] = recipient
+
+    with open(_metadata_path_for_directory(directory, filename), 'w', encoding='utf-8') as handle:
+        json.dump(payload, handle)
+
+
 def _read_upload_metadata(filename):
     path = _metadata_path(filename)
+    if not os.path.exists(path):
+        return {}
+
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            parsed = json.load(handle)
+            return parsed if isinstance(parsed, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _read_directory_metadata(directory, filename):
+    path = _metadata_path_for_directory(directory, filename)
     if not os.path.exists(path):
         return {}
 
@@ -72,6 +110,72 @@ def clean_filename(name: str) -> str:
         return secure_filename((name or '').strip())
     except Exception:
         return ''
+
+
+def build_storage_filename(name: str) -> str:
+    cleaned = clean_filename(name)
+    if not cleaned:
+        return ''
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    return f"{timestamp}_{cleaned}"
+
+
+def normalize_recipient(recipient: str) -> str:
+    value = str(recipient or '').strip().lower()
+    if not value:
+        return ''
+
+    # Handle display-name formats and whitespace safely.
+    if '<' in value and '>' in value:
+        match = re.search(r'<([^>]+)>', value)
+        if match:
+            value = match.group(1).strip().lower()
+
+    return value
+
+
+def resolve_target_from_recipient(recipient: str):
+    normalized = normalize_recipient(recipient)
+    local_part = ''
+    domain = ''
+
+    if '@' in normalized:
+        local_part, domain = normalized.split('@', 1)
+
+    target = 'uploads'
+    directory = UPLOAD_DIR
+
+    if local_part == 'kb' and domain.startswith('mail.'):
+        target = 'kb'
+        directory = KB_UNCATEGORIZED_DIR
+    elif local_part == 'uploads' and domain.startswith('mail.'):
+        target = 'uploads'
+        directory = UPLOAD_DIR
+
+    LOGGER.info('Email routing resolved recipient=%r to target=%s', normalized or recipient or '', target)
+    return {
+        'recipient': normalized,
+        'target': target,
+        'directory': directory,
+    }
+
+
+def extract_recipient_from_request():
+    candidates = [
+        request.form.get('recipient'),
+        request.form.get('to'),
+        request.form.get('To'),
+        request.headers.get('X-Original-To'),
+        request.headers.get('X-Envelope-To'),
+    ]
+
+    for candidate in candidates:
+        normalized = normalize_recipient(candidate)
+        if normalized:
+            return normalized
+
+    return ''
 
 
 def extract_original_name(saved_name: str) -> str:
@@ -121,97 +225,46 @@ def _build_file_url(filename: str) -> str:
     return f"/uploads/{filename}"
 
 
-def purge_previous_versions(clean_key: str) -> None:
-    """Remove previously saved files whose cleaned original name matches clean_key.
-
-    - clean_key should be lowercased, derived from clean_filename(original_name).
-    - Ignores timestamp prefixes.
-    - Safe on malformed input (no-ops on empty key).
-    - Logs removed duplicates.
-    """
-    ck = (clean_key or '').strip().lower()
-    if not ck:
-        return
-
-    try:
-        for name in os.listdir(UPLOAD_DIR):
-            # Skip metadata files
-            if name.endswith('.meta.json'):
-                continue
-
-            # Compare using cleaned, case-insensitive original component
-            original_component = clean_filename(extract_original_name(name)).lower()
-            if original_component != ck:
-                continue
-
-            file_path = os.path.join(UPLOAD_DIR, name)
-            meta_path = _metadata_path(name)
-
-            try:
-                os.remove(file_path)
-                print(f"[uploads] Removed older duplicate: {file_path}")
-            except OSError:
-                pass
-
-            try:
-                if os.path.exists(meta_path):
-                    os.remove(meta_path)
-            except OSError:
-                pass
-    except OSError:
-        # Upload directory might not be readable; ignore purge errors.
-        return
+def _build_kb_file_url(filename: str, category: str = 'uncategorized') -> str:
+    safe_category = clean_filename(category) or 'uncategorized'
+    return f"/kb/{safe_category}/{filename}"
 
 
-def save_uploaded_attachment(file, source='manual'):
-    # Determine a stable comparison key for deduplication (cleaned, case-insensitive)
-    original_name = (file.filename or '').strip()
-    cleaned = clean_filename(original_name)
-    clean_key = cleaned.lower()
+def save_attachment_bytes_to_directory(filename, content, directory, source='manual', recipient=None, route='uploads'):
+    cleaned = clean_filename(filename)
+    if not cleaned:
+        raise ValueError('Attachment filename is missing or invalid.')
 
-    # Purge older iterations of the same cleaned filename (keep only the newest)
-    purge_previous_versions(clean_key)
-
-    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    safe_name = f"{timestamp}_{cleaned}"
-    path = os.path.join(UPLOAD_DIR, safe_name)
-
-    file.save(path)
-    _write_upload_metadata(safe_name, source)
-
-    print(f"[uploads] Saved file: {path} (source={source})")
-
-    return {
-        "filename": safe_name,
-        "path": path,
-        "url": _build_file_url(safe_name),
-    }
-
-
-def save_uploaded_attachment_bytes(filename, content, source='manual'):
-    # Determine a stable comparison key for deduplication (cleaned, case-insensitive)
-    original_name = (filename or '').strip()
-    cleaned = clean_filename(original_name)
-    clean_key = cleaned.lower()
-
-    # Purge older iterations of the same cleaned filename (keep only the newest)
-    purge_previous_versions(clean_key)
-
-    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    safe_name = f"{timestamp}_{cleaned}"
-    path = os.path.join(UPLOAD_DIR, safe_name)
+    os.makedirs(directory, exist_ok=True)
+    safe_name = build_storage_filename(cleaned)
+    path = os.path.join(directory, safe_name)
 
     with open(path, 'wb') as handle:
         handle.write(content)
-    _write_upload_metadata(safe_name, source)
 
-    print(f"[uploads] Saved file from bytes: {path} (source={source})")
+    _write_upload_metadata_for_directory(directory, safe_name, source, recipient=recipient, route=route)
+    LOGGER.info('Saved file path=%s source=%s route=%s', path, source, route)
 
     return {
         "filename": safe_name,
         "path": path,
-        "url": _build_file_url(safe_name),
+        "url": _build_kb_file_url(safe_name) if route == 'kb' else _build_file_url(safe_name),
     }
+
+
+def save_uploaded_attachment(file, source='manual'):
+    original_name = (file.filename or '').strip()
+    content = file.read()
+    if hasattr(file, 'stream'):
+        try:
+            file.stream.seek(0)
+        except OSError:
+            pass
+    return save_attachment_bytes_to_directory(original_name, content, UPLOAD_DIR, source=source, route='uploads')
+
+
+def save_uploaded_attachment_bytes(filename, content, source='manual'):
+    return save_attachment_bytes_to_directory(filename, content, UPLOAD_DIR, source=source, route='uploads')
 
 
 def _get_sendgrid_attachment_names():
@@ -274,6 +327,7 @@ def _extract_saved_original_name(saved_filename):
 @email_upload_bp.route("/webhooks/mailgun", methods=["POST"])
 def handle_incoming_email():
     saved_files = []
+    routing = resolve_target_from_recipient(extract_recipient_from_request())
 
     for file in request.files.values():
         filename = (file.filename or '').strip()
@@ -286,10 +340,18 @@ def handle_incoming_email():
         if size > MAX_ATTACHMENT_BYTES:
             continue
 
-        saved_record = save_uploaded_attachment(file, source='email')
+        saved_record = save_attachment_bytes_to_directory(
+            filename,
+            file.read(),
+            routing['directory'],
+            source='email',
+            recipient=routing['recipient'],
+            route=routing['target'],
+        )
         saved_files.append({
             "filename": saved_record["filename"],
-            "url": saved_record["url"]
+            "url": saved_record["url"],
+            "route": routing['target'],
         })
 
     if not saved_files:
@@ -300,15 +362,15 @@ def handle_incoming_email():
 
     return jsonify({
         "success": True,
-        "saved": saved_files
+        "saved": saved_files,
+        "route": routing['target'],
     })
 
 
 @email_upload_bp.route("/uploads", methods=["GET"])
 @email_upload_bp.route("/api/uploads", methods=["GET"])  # parallel API path (back-compat preserved)
 def list_uploads():
-    # Dedupe at read-time: group by cleaned original filename and keep only the most recent
-    files_by_key = {}
+    files = []
 
     try:
         names = os.listdir(UPLOAD_DIR)
@@ -326,13 +388,7 @@ def list_uploads():
         if not os.path.isfile(full_path):
             continue
 
-        try:
-            original = extract_original_name(name)
-            clean_key = clean_filename(original).lower()
-            if not clean_key:
-                continue
-        except Exception:
-            continue
+        original = extract_original_name(name)
 
         try:
             modified_ts = os.path.getmtime(full_path)
@@ -341,26 +397,12 @@ def list_uploads():
 
         metadata = _read_upload_metadata(name)
         source = str(metadata.get('source') or 'manual').strip() or 'manual'
-
-        # Keep only the newest file per cleaned key
-        prev = files_by_key.get(clean_key)
-        if (prev is None) or (modified_ts > prev["modified"]):
-            files_by_key[clean_key] = {
-                "name": name,
-                "original": original,
-                "modified": modified_ts,
-                "source": source,
-            }
-
-    # Build response list
-    files = []
-    for item in files_by_key.values():
         files.append({
-            "filename": item["name"],
-            "originalName": item["original"],
-            "url": _build_file_url(item["name"]),
-            "modifiedAt": datetime.fromtimestamp(item["modified"], tz=timezone.utc).isoformat() if item["modified"] else None,
-            "source": item["source"],
+            "filename": name,
+            "originalName": original,
+            "url": _build_file_url(name),
+            "modifiedAt": datetime.fromtimestamp(modified_ts, tz=timezone.utc).isoformat() if modified_ts else None,
+            "source": source,
         })
 
     # Newest first

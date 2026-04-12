@@ -36,12 +36,67 @@ def _source_metadata_path():
     return _storage_root() / 'source.json'
 
 
+def _uploads_dir():
+    return _storage_root() / 'uploads'
+
+
 def _ensure_storage_dir():
     _storage_root().mkdir(parents=True, exist_ok=True)
 
 
 def _current_timestamp():
     return datetime.now(timezone.utc).isoformat()
+
+
+def _normalize_ticket_filename(value):
+    return re.sub(r'[^a-z0-9]+', '', str(value or '').lower())
+
+
+def is_active_ticket_file(filename):
+    try:
+        name = Path(str(filename or '')).name
+    except Exception:
+        name = str(filename or '')
+
+    if not name.lower().endswith('.csv'):
+        return False
+
+    normalized = _normalize_ticket_filename(name)
+    return 'activeticket' in normalized or 'activetickets' in normalized or 'dailydigest' in normalized
+
+
+def _resolve_active_ticket_dataset_path():
+    uploads_dir = _uploads_dir()
+    if not uploads_dir.exists():
+        return None
+
+    candidates = []
+
+    try:
+        entries = list(uploads_dir.iterdir())
+    except OSError:
+        return None
+
+    for entry in entries:
+        if not entry.is_file() or entry.name.endswith('.meta.json'):
+            continue
+
+        if not is_active_ticket_file(entry.name):
+            continue
+
+        try:
+            modified = entry.stat().st_mtime
+        except OSError:
+            modified = 0
+
+        LOGGER.info('Valid active ticket dataset candidate found: %s', entry.name)
+        candidates.append((modified, entry))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return candidates[0][1]
 
 
 def _parse_csv_bytes(content):
@@ -117,9 +172,11 @@ def _write_source_metadata(source, last_updated):
 
 def _set_cached_metadata(source, last_updated):
     global _cached_metadata
+    path = _resolve_active_ticket_dataset_path()
     _cached_metadata = {
         'source': source,
         'last_updated': last_updated,
+        'file_name': path.name if path else None,
     }
 
 
@@ -136,22 +193,32 @@ def load_active_ticket_dataset(force_reload=False):
 
     if _cached_dataset is not None and not force_reload:
         if _cached_metadata is None:
-            _cached_metadata = _read_source_metadata()
+            path = _resolve_active_ticket_dataset_path()
+            _cached_metadata = {
+                **_read_source_metadata(),
+                'file_name': path.name if path else None,
+            }
         return _cached_dataset
 
-    path = _latest_csv_path()
+    path = _resolve_active_ticket_dataset_path()
 
-    if not path.exists():
+    if path is None or not path.exists():
         _cached_dataset = {
             'columns': [],
             'rows': [],
         }
-        _cached_metadata = _read_source_metadata()
+        _cached_metadata = {
+            **_read_source_metadata(),
+            'file_name': None,
+        }
         return _cached_dataset
 
     content = path.read_bytes()
     _cached_dataset = _parse_csv_bytes(content)
-    _cached_metadata = _read_source_metadata()
+    _cached_metadata = {
+        **_read_source_metadata(),
+        'file_name': path.name,
+    }
     return _cached_dataset
 
 
@@ -161,7 +228,11 @@ def get_source_metadata(force_reload=False):
     if _cached_metadata is not None and not force_reload:
         return _cached_metadata
 
-    _cached_metadata = _read_source_metadata()
+    path = _resolve_active_ticket_dataset_path()
+    _cached_metadata = {
+        **_read_source_metadata(),
+        'file_name': path.name if path else None,
+    }
     return _cached_metadata
 
 
@@ -185,6 +256,7 @@ def load_latest_ticket_payload(force_reload=False):
     return {
         'source': metadata.get('source'),
         'last_updated': metadata.get('last_updated'),
+        'fileName': metadata.get('file_name'),
         'tickets': dataset['rows'],
         'columns': dataset['columns'],
         'message': '' if dataset['rows'] else 'No CSV dataset has been loaded yet.',
@@ -205,10 +277,14 @@ def update_ticket_assignee(ticket_id, assignee):
     global _cached_dataset
 
     dataset = load_active_ticket_dataset()
+    path = _resolve_active_ticket_dataset_path()
     assignee_column = _find_assignee_column(dataset['columns'])
 
     if not assignee_column:
         raise ValueError('The latest dataset does not include an assignee column.')
+
+    if path is None:
+        raise ValueError('No active ticket dataset is available.')
 
     updated = False
     for row in dataset['rows']:
@@ -222,7 +298,14 @@ def update_ticket_assignee(ticket_id, assignee):
     if not updated:
         return None
 
-    _write_csv(dataset)
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=dataset['columns'], extrasaction='ignore')
+    writer.writeheader()
+
+    for row in dataset['rows']:
+        writer.writerow({column: row.get(column, '') for column in dataset['columns']})
+
+    path.write_bytes(output.getvalue().encode('utf-8'))
     metadata = get_source_metadata()
     last_updated = _current_timestamp()
     source = metadata.get('source') or SOURCE_MANUAL

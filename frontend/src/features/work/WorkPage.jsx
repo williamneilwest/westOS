@@ -190,48 +190,25 @@ function formatUploadSource(value) {
   return String(value || '').trim().toLowerCase() === 'email' ? 'Email upload' : 'Manual upload';
 }
 
+function isActiveTicketFile(filename) {
+  const normalized = String(filename || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+
+  const isCsv = String(filename || '').toLowerCase().endsWith('.csv');
+  if (!isCsv) {
+    return false;
+  }
+
+  return normalized.includes('activeticket') || normalized.includes('activetickets') || normalized.includes('dailydigest');
+}
+
 function getDefaultVisibleColumns(analysis) {
   return getStoredVisibleColumns(PREVIEW_COLUMN_PREFERENCE_KEY, analysis?.columns || []);
 }
 
 function findLatestActiveTicketsUpload(files = []) {
-  // Files from /uploads are already newest-first.
-  // We only consider CSVs whose names clearly indicate Daily Digest or Active Tickets.
-  const isCsv = (f) => {
-    const name = String(f?.filename || '').toLowerCase();
-    const orig = String(f?.originalName || '').toLowerCase();
-    const mime = String(f?.mimeType || '').toLowerCase();
-    const nameCsv = name.endsWith('.csv') || orig.endsWith('.csv');
-    const mimeCsv = mime === 'text/csv' || mime === 'application/vnd.ms-excel';
-    return nameCsv || mimeCsv;
-  };
-
-  const normalizedName = (f) =>
-    String(f?.originalName || f?.filename || '')
-      .toLowerCase()
-      .replace(/[._-]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-  const hasAll = (text, words) => words.every((w) => text.includes(w));
-
-  // 1) Prefer explicit Daily Digest
-  const digest = files.find((f) => isCsv(f) && hasAll(normalizedName(f), ['daily', 'digest']));
-  if (digest) return digest;
-
-  // 2) Then prefer Active + Ticket(s)
-  const activeTickets = files.find(
-    (f) =>
-      isCsv(f) && (hasAll(normalizedName(f), ['active', 'ticket']) || hasAll(normalizedName(f), ['active', 'tickets']))
-  );
-  if (activeTickets) return activeTickets;
-
-  // 3) Legacy compact naming like "activetickets"
-  const legacy = files.find((f) => isCsv(f) && normalizedName(f).includes('activetickets'));
-  if (legacy) return legacy;
-
-  // 4) No suitable CSV found
-  return null;
+  return files.find((file) => isActiveTicketFile(file?.originalName || file?.filename)) || null;
 }
 
 function buildLocalAnalysis(fileName, dataset) {
@@ -601,6 +578,10 @@ export function WorkPage() {
   const [debouncedRowFilter, setDebouncedRowFilter] = useState('');
   const [selectedRow, setSelectedRow] = useState(null);
   const [isLoadingSavedRun, setIsLoadingSavedRun] = useState(false);
+  const activeTicketUploads = useMemo(
+    () => uploadedFiles.filter((file) => isActiveTicketFile(file.originalName || file.filename)),
+    [uploadedFiles]
+  );
 
   async function loadSavedAnalysisEntry(entry, { showLoading = true } = {}) {
     if (!entry?.id) {
@@ -708,21 +689,21 @@ export function WorkPage() {
   }, []);
 
   useEffect(() => {
-    if (!recentAnalyses.length || isLoadingSavedRun || latestFileName || findLatestActiveTicketsUpload(uploadedFiles)) {
+    if (!recentAnalyses.length || isLoadingSavedRun || latestFileName || activeTicketUploads.length) {
       return;
     }
 
     if (!analysis?.analysisId) {
       void loadSavedAnalysisEntry(recentAnalyses[0], { showLoading: false });
     }
-  }, [analysis?.analysisId, isLoadingSavedRun, latestFileName, recentAnalyses, uploadedFiles]);
+  }, [activeTicketUploads.length, analysis?.analysisId, isLoadingSavedRun, latestFileName, recentAnalyses]);
 
   useEffect(() => {
     if (isLoadingUploads || hasAutoLoadedLatestUpload.current) {
       return;
     }
 
-    const latestActiveTicketsUpload = findLatestActiveTicketsUpload(uploadedFiles);
+    const latestActiveTicketsUpload = activeTicketUploads[0] || null;
     if (!latestActiveTicketsUpload) {
       hasAutoLoadedLatestUpload.current = true;
       return;
@@ -730,7 +711,7 @@ export function WorkPage() {
 
     hasAutoLoadedLatestUpload.current = true;
     void handleUploadedFileSelection(latestActiveTicketsUpload);
-  }, [isLoadingUploads, uploadedFiles]);
+  }, [activeTicketUploads, isLoadingUploads]);
 
   useEffect(() => {
     window.localStorage.setItem(VIEW_STORAGE_KEY, ticketView);
@@ -1281,11 +1262,9 @@ export function WorkPage() {
                     <div className="dataset-panel__section-header">
                       <h4>Uploaded CSV Files</h4>
                     </div>
-                    {uploadedFiles.filter((file) => file.filename.toLowerCase().endsWith('.csv')).length ? (
+                    {activeTicketUploads.length ? (
                       <div className="stack-list">
-                        {uploadedFiles
-                          .filter((file) => file.filename.toLowerCase().endsWith('.csv'))
-                          .map((file) => (
+                        {activeTicketUploads.map((file) => (
                             <button
                               key={file.filename}
                               className="stack-row stack-row--interactive"
@@ -1310,8 +1289,8 @@ export function WorkPage() {
                     ) : (
                       <EmptyState
                         icon={<Upload size={20} />}
-                        title="No uploaded CSV files yet"
-                        description="Email intake is archive-only now. Choose a saved CSV here when you want to load it into the table."
+                        title="No active ticket CSV files yet"
+                        description="Only CSVs whose filenames match Active Tickets or Daily Digest are available in this workspace."
                       />
                     )}
                   </div>
