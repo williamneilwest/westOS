@@ -426,6 +426,14 @@ export function AppShell() {
   }, [currentModule?.href]);
 
   useEffect(() => {
+    if (isWorkDomain || !authenticated) {
+      setSystemHealth({
+        level: 'warning',
+        text: isWorkDomain ? 'Public work access' : 'Sign in to view status',
+      });
+      return undefined;
+    }
+
     let isMounted = true;
 
     async function loadStatus() {
@@ -471,7 +479,7 @@ export function AppShell() {
       isMounted = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [authenticated, isWorkDomain]);
 
   return (
     <div className="shell">

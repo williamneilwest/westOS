@@ -1463,6 +1463,30 @@ textarea {
   margin-top: 0.55rem;
 }
 
+.gated-card {
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.gated-card__body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.gated-card__icon {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
 /* Scroll container for long content inside cards */
 .card__scroll {
   /* Allow the card body to scroll independently without growing the whole layout */
@@ -2340,6 +2364,10 @@ textarea {
   border: 1px solid var(--border);
   background: var(--bg-panel-strong);
   box-shadow: var(--shadow-soft);
+}
+
+.column-selector__panel--portal {
+  z-index: 70;
 }
 
 .dataset-change-toggle {

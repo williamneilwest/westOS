@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, Cpu, RefreshCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useCurrentUser } from '../../app/hooks/useCurrentUser';
 import { getServices, getSystemStatus } from '../../app/services/api';
 import { Button } from '../../app/ui/Button';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { SectionHeader } from '../../app/ui/SectionHeader';
+import { GatedCard } from '../auth/GatedCard';
 import { LogNotificationBanner } from './LogNotificationBanner';
 import { LogsPanel } from './LogsPanel';
 
@@ -138,10 +140,12 @@ function mapCoreStatusByName(name, status) {
 }
 
 export function ConsolePage() {
+  const { loading: authLoading, authenticated, isAdmin } = useCurrentUser();
   const [services, setServices] = useState([]);
   const [systemStatus, setSystemStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [requestedLogContainer, setRequestedLogContainer] = useState('backend');
+  const canViewModule = authenticated && isAdmin;
   const logsPanelRef = useRef(null);
 
   async function loadHealth() {
@@ -222,8 +226,16 @@ export function ConsolePage() {
   }
 
   useEffect(() => {
+    if (!canViewModule) {
+      setServices([]);
+      setSystemStatus(null);
+      setRequestedLogContainer('backend');
+      setIsLoading(false);
+      return;
+    }
+
     void loadHealth();
-  }, []);
+  }, [canViewModule]);
 
   const totalServices = services.length;
   const healthyCount = services.filter((service) => service.status === 'ok').length;
@@ -272,6 +284,40 @@ export function ConsolePage() {
     ],
     [systemStatus]
   );
+
+  if (authLoading) {
+    return <section className="module"><p className="status-text">Checking authorization...</p></section>;
+  }
+
+  if (!authenticated) {
+    return (
+      <section className="module">
+        <SectionHeader
+          tag="/console"
+          title="Console"
+          description="Operational dashboard for service health and logs."
+        />
+        <GatedCard message="Sign in to view this module" />
+      </section>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <section className="module">
+        <SectionHeader
+          tag="/console"
+          title="Console"
+          description="Operational dashboard for service health and logs."
+        />
+        <GatedCard
+          title="Admin access required"
+          message="Your account does not have permission to view console telemetry and logs."
+          showAction={false}
+        />
+      </section>
+    );
+  }
 
   return (
     <section className="module">
