@@ -59,13 +59,12 @@ def run_chat_completion(payload, model, temperature, max_tokens, api_base):
         raise RuntimeError('LiteLLM model is not configured. Set LITELLM_MODEL in the environment.')
 
     messages = _normalize_messages(payload)
-    request_temperature = 0.2
-    # Honor client-provided max_tokens up to the server-configured limit; remove low hard cap
     try:
-        requested = int(payload.get('max_tokens', max_tokens))
-    except Exception:
-        requested = max_tokens
-    request_max_tokens = max(1, min(requested, max_tokens))
+        request_temperature = float(payload.get('temperature', temperature))
+    except (TypeError, ValueError):
+        request_temperature = float(temperature)
+
+    request_max_tokens = int(payload.get('max_tokens', max_tokens))
 
     request_kwargs = {
         'model': model,
@@ -83,7 +82,7 @@ def run_chat_completion(payload, model, temperature, max_tokens, api_base):
                 # Align Ollama generation limit with request_max_tokens
                 'num_predict': request_max_tokens,
                 'num_ctx': 2048,
-                'temperature': 0.2,
+                'temperature': request_temperature,
             },
         }
 
@@ -105,14 +104,14 @@ def run_chat_completion(payload, model, temperature, max_tokens, api_base):
     return response.model_dump() if hasattr(response, 'model_dump') else response
 
 
-def warmup_chat_completion(model, temperature, max_tokens, api_base):
+def warmup_chat_completion(model, temperature, api_base):
     if not model:
         return
 
     request_kwargs = {
         'model': model,
         'messages': [{'role': 'user', 'content': 'warmup'}],
-        'temperature': 0.2,
+        'temperature': float(temperature),
         'max_tokens': 1,
         'stream': False,
     }
@@ -124,7 +123,7 @@ def warmup_chat_completion(model, temperature, max_tokens, api_base):
             'options': {
                 'num_predict': 100,
                 'num_ctx': 1024,
-                'temperature': 0.2,
+                'temperature': float(temperature),
             },
         }
 

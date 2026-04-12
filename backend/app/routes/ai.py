@@ -1,8 +1,13 @@
 import json
+import os
+import re
+from datetime import datetime, timezone
 
 from requests import RequestException
 from flask import Blueprint, current_app, jsonify, request
 
+from .email_upload import clean_filename
+from ..models.reference import AIAnalysis, SessionLocal, init_db
 from ..services.settings_store import get_ai_settings
 from ..services.ai_client import (
     build_compat_chat_response,
@@ -11,6 +16,7 @@ from ..services.ai_client import (
     call_gateway_chat,
     call_gateway_openai_chat,
 )
+from ..services.document_parser import parse_document
 from ..services.smart_analysis import (
     build_execution_plan,
     build_output_payload,
@@ -24,6 +30,34 @@ from ..services.smart_analysis import (
 
 
 ai_bp = Blueprint('ai', __name__)
+DOCUMENT_ANALYSIS_PROMPT = """[PASTE THE FULL DOCUMENT PARSER PROMPT HERE EXACTLY]"""
+
+
+def _ai_analysis_enabled():
+    value = str(os.getenv('AI_ANALYSIS_ENABLED', 'true')).strip().lower()
+    return value in {'1', 'true', 'yes', 'on'}
+
+
+def _env_model():
+    return str(os.getenv('OPENAI_MODEL', '')).strip()
+
+
+def _env_temperature():
+    try:
+        return float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
+    except ValueError:
+        return 0.2
+
+
+def calculate_max_tokens(document_text: str) -> int:
+    base = 2000
+    per_char = int(len(document_text) / 2)
+    calculated = base + per_char
+
+    hard_cap = int(os.getenv('OPENAI_HARD_TOKEN_CAP', 20000))
+    soft_cap = int(os.getenv('OPENAI_MAX_OUTPUT_TOKENS', 12000))
+
+    return max(1000, min(calculated, soft_cap, hard_cap))
 
 
 def _default_ai_settings():
@@ -46,6 +80,100 @@ def _run_model_prompt(prompt, analysis_mode='preview'):
     payload = _gateway_payload({'message': prompt, 'analysis_mode': analysis_mode})
     result = call_gateway_chat(payload, current_app.config['AI_GATEWAY_BASE_URL'])
     return result.get('message', '')
+
+
+def _extract_document_path(document_url):
+    raw_url = str(document_url or '').strip()
+    if not raw_url:
+        return ''
+
+    path_only = re.sub(r'^https?://[^/]+', '', raw_url)
+    path_only = path_only.split('?', 1)[0]
+    base_dir = current_app.config.get('BACKEND_DATA_DIR', '/app/data')
+
+    if path_only.startswith('/uploads/'):
+        filename = clean_filename(path_only[len('/uploads/'):])
+        if not filename:
+            return ''
+        return os.path.join(base_dir, 'uploads', filename)
+
+    if path_only.startswith('/api/uploads/'):
+        filename = clean_filename(path_only[len('/api/uploads/'):])
+        if not filename:
+            return ''
+        return os.path.join(base_dir, 'uploads', filename)
+
+    kb_match = re.match(r'^/(?:api/)?kb/([^/]+)/([^/]+)$', path_only)
+    if kb_match:
+        category = clean_filename(kb_match.group(1))
+        filename = clean_filename(kb_match.group(2))
+        if not category or not filename:
+            return ''
+        return os.path.join(base_dir, 'work', 'kb', category, filename)
+
+    return ''
+
+
+def _extract_full_quick_sections(raw_message):
+    message = str(raw_message or '').strip()
+    if not message:
+        return {
+            'full': '',
+            'quick': '',
+        }
+
+    match = re.search(
+        r'(?:full(?:_analysis)?\s*[:\-]\s*)(?P<full>[\s\S]*?)(?:\n+\s*(?:quick(?:_summary)?|quick view)\s*[:\-]\s*)(?P<quick>[\s\S]*)',
+        message,
+        flags=re.IGNORECASE,
+    )
+    if match:
+        full = str(match.group('full') or '').strip()
+        quick = str(match.group('quick') or '').strip()
+        return {
+            'full': full or message,
+            'quick': quick or full or message,
+        }
+
+    return {
+        'full': message,
+        'quick': message,
+    }
+
+
+def _analysis_metadata_path(file_path):
+    directory = os.path.dirname(file_path or '')
+    filename = os.path.basename(file_path or '')
+    if not directory or not filename:
+        return ''
+    return os.path.join(directory, f'{filename}.meta.json')
+
+
+def _read_analysis_metadata(file_path):
+    meta_path = _analysis_metadata_path(file_path)
+    if not meta_path or not os.path.exists(meta_path):
+        return {}
+    try:
+        with open(meta_path, 'r', encoding='utf-8') as handle:
+            data = json.load(handle)
+            return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write_analysis_metadata(file_path, payload):
+    meta_path = _analysis_metadata_path(file_path)
+    if not meta_path:
+        return
+
+    merged = dict(_read_analysis_metadata(file_path))
+    merged['analysis'] = payload
+
+    try:
+        with open(meta_path, 'w', encoding='utf-8') as handle:
+            json.dump(merged, handle, ensure_ascii=False)
+    except OSError:
+        current_app.logger.warning('Failed to write AI analysis metadata for %s', file_path)
 
 
 def _run_smart_analysis(payload):
@@ -187,3 +315,160 @@ def health():
             use_ai_gateway=True,
         )
     )
+
+
+@ai_bp.post('/api/ai/analyze-document')
+@ai_bp.post('/ai/analyze-document')
+def analyze_document_endpoint():
+    if not _ai_analysis_enabled():
+        return jsonify({'error': 'AI document analysis is disabled by environment configuration.'}), 503
+
+    init_db()
+    payload = request.get_json(silent=True) or {}
+    document_text = str(payload.get('documentText') or '').strip()
+    document_name = str(payload.get('documentName') or '').strip() or 'Untitled Document'
+    document_url = str(payload.get('documentUrl') or '').strip()
+    rerun = bool(payload.get('rerun'))
+    resolved_path = _extract_document_path(document_url)
+
+    if not document_text and resolved_path and os.path.isfile(resolved_path):
+        extracted = parse_document(resolved_path) or {}
+        document_text = str(extracted.get('text') or '').strip()
+
+    if not document_text:
+        return jsonify({'error': 'documentText is required.'}), 400
+
+    session = SessionLocal()
+    try:
+        if not rerun:
+            existing = (
+                session.query(AIAnalysis)
+                .filter(AIAnalysis.document_name == document_name, AIAnalysis.raw_text == document_text)
+                .order_by(AIAnalysis.created_at.desc(), AIAnalysis.id.desc())
+                .first()
+            )
+            if existing:
+                if resolved_path and os.path.isfile(resolved_path):
+                    _write_analysis_metadata(
+                        resolved_path,
+                        {
+                            'status': 'success',
+                            'analyzedAt': existing.created_at.isoformat() if existing.created_at else datetime.now(timezone.utc).isoformat(),
+                            'analysisId': existing.id,
+                            'documentName': existing.document_name,
+                            'full_analysis': existing.full_analysis,
+                            'quick_summary': existing.quick_summary,
+                            'raw': existing.full_analysis,
+                            'cached': True,
+                        },
+                    )
+                return jsonify(
+                    {
+                        'success': True,
+                        'data': {
+                            'id': existing.id,
+                            'document_name': existing.document_name,
+                            'full_analysis': existing.full_analysis,
+                            'quick_summary': existing.quick_summary,
+                            'raw': existing.full_analysis,
+                            'token_usage': {
+                                'input': int(existing.input_tokens or 0),
+                                'output': int(existing.output_tokens or 0),
+                                'total': int(existing.input_tokens or 0) + int(existing.output_tokens or 0),
+                            },
+                            'created_at': existing.created_at.isoformat() if existing.created_at else None,
+                            'cached': True,
+                        },
+                    }
+                )
+
+        model_prompt = '\n\n'.join(
+            [
+                DOCUMENT_ANALYSIS_PROMPT,
+                f'Document Name: {document_name}',
+                'Document Content:',
+                document_text,
+            ]
+        )
+
+        max_tokens = calculate_max_tokens(document_text)
+        request_payload = {
+            'message': model_prompt,
+            'analysis_mode': 'focused',
+            'model': _env_model(),
+            'max_tokens': max_tokens,
+            'temperature': _env_temperature(),
+        }
+        if max_tokens > 18000:
+            current_app.logger.warning('High token request for document: %s', document_name)
+        gateway_result = call_gateway_chat(
+            request_payload,
+            current_app.config['AI_GATEWAY_BASE_URL'],
+            timeout_seconds=20,
+        )
+        usage = gateway_result.get('usage', {}) if isinstance(gateway_result, dict) else {}
+        usage = usage if isinstance(usage, dict) else {}
+        input_tokens = int(usage.get('prompt_tokens') or usage.get('input_tokens') or 0)
+        output_tokens = int(usage.get('completion_tokens') or usage.get('output_tokens') or 0)
+        compat_result = build_compat_chat_response(request_payload, gateway_result)
+        raw_response = str(compat_result.get('message') or '').strip()
+        if not raw_response:
+            raw_response = 'AI returned an empty response.'
+        if len(raw_response) < 1000:
+            current_app.logger.warning('Possible truncated AI response for %s (length=%s)', document_name, len(raw_response))
+
+        parsed_sections = _extract_full_quick_sections(raw_response)
+        full_analysis = raw_response
+        quick_summary = parsed_sections.get('quick') or raw_response
+
+        record = AIAnalysis(
+            document_name=document_name,
+            raw_text=document_text,
+            full_analysis=str(full_analysis),
+            quick_summary=str(quick_summary),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            created_at=datetime.now(timezone.utc),
+        )
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+
+        if resolved_path and os.path.isfile(resolved_path):
+            _write_analysis_metadata(
+                resolved_path,
+                {
+                    'status': 'success',
+                    'analyzedAt': record.created_at.isoformat() if record.created_at else datetime.now(timezone.utc).isoformat(),
+                    'analysisId': record.id,
+                    'documentName': record.document_name,
+                    'full_analysis': record.full_analysis,
+                    'quick_summary': record.quick_summary,
+                    'raw': record.full_analysis,
+                    'cached': False,
+                },
+            )
+
+        return jsonify(
+            {
+                'success': True,
+                'data': {
+                    'id': record.id,
+                    'document_name': record.document_name,
+                    'full_analysis': record.full_analysis,
+                    'quick_summary': record.quick_summary,
+                    'raw': record.full_analysis,
+                    'token_usage': {
+                        'input': input_tokens,
+                        'output': output_tokens,
+                        'total': input_tokens + output_tokens,
+                    },
+                    'created_at': record.created_at.isoformat() if record.created_at else None,
+                    'cached': False,
+                },
+            }
+        )
+    except RequestException as error:
+        return jsonify({'error': f'AI request failed: {error}'}), 503
+    finally:
+        session.close()

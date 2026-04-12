@@ -101,6 +101,37 @@ export function analyzeKbDocument(category, filename) {
   });
 }
 
+export function analyzeDocumentWithAi({ documentText = '', documentName = '', documentUrl = '', rerun = false } = {}) {
+  return request(backendBaseUrl, '/api/ai/analyze-document', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      documentText,
+      documentName,
+      documentUrl,
+      rerun,
+    })
+  });
+}
+
+export function updateFileById(fileId, payload) {
+  return request(backendBaseUrl, `/api/files/${fileId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload || {})
+  });
+}
+
+export function deleteFileById(fileId) {
+  return request(backendBaseUrl, `/api/files/${fileId}`, {
+    method: 'DELETE'
+  });
+}
+
 export function getAnalyzedDocuments() {
   return request(backendBaseUrl, '/api/documents');
 }

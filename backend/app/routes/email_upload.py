@@ -302,6 +302,79 @@ def _build_kb_file_url(filename: str, category: str = 'uncategorized') -> str:
     return f"/kb/{safe_category}/{filename}"
 
 
+def _resolve_file_id(file_id: str):
+    raw = str(file_id or '').strip().lstrip('/')
+    if not raw:
+        return None
+
+    if raw.startswith('api/'):
+        raw = raw[len('api/'):]
+
+    if raw.startswith('uploads/'):
+        filename = clean_filename(raw[len('uploads/'):])
+        if not filename:
+            return None
+        directory = _uploads_dir()
+        return {
+            'route': 'uploads',
+            'directory': directory,
+            'filename': filename,
+            'category': '',
+            'path': os.path.join(directory, filename),
+        }
+
+    if raw.startswith('kb/'):
+        kb_parts = raw.split('/', 2)
+        if len(kb_parts) != 3:
+            return None
+        category = clean_filename(kb_parts[1])
+        filename = clean_filename(kb_parts[2])
+        if not category or not filename:
+            return None
+        directory = get_kb_category_dir(category)
+        return {
+            'route': 'kb',
+            'directory': directory,
+            'filename': filename,
+            'category': category,
+            'path': os.path.join(directory, filename),
+        }
+
+    return None
+
+
+def _serialize_file_record(route, directory, filename, category=''):
+    path = os.path.join(directory, filename)
+    metadata = _read_directory_metadata(directory, filename)
+    source = str(metadata.get('source') or ('email' if route == 'kb' else 'manual')).strip() or 'manual'
+    mime_type, _ = mimetypes.guess_type(filename)
+    try:
+        modified_ts = os.path.getmtime(path)
+    except OSError:
+        modified_ts = 0
+
+    if route == 'kb':
+        url = _build_kb_file_url(filename, category=category or metadata.get('category') or 'uncategorized')
+    else:
+        url = _build_file_url(filename)
+
+    tags = metadata.get('tags')
+    if not isinstance(tags, list):
+        tags = []
+
+    return {
+        'id': url.lstrip('/'),
+        'filename': filename,
+        'originalName': metadata.get('originalName') or extract_original_name(filename),
+        'url': url,
+        'modifiedAt': datetime.fromtimestamp(modified_ts, tz=timezone.utc).isoformat() if modified_ts else None,
+        'source': source,
+        'mimeType': mime_type or 'application/octet-stream',
+        'category': category or metadata.get('category') or '',
+        'tags': tags,
+    }
+
+
 def save_attachment_bytes_to_directory(filename, content, directory, source='manual', recipient=None, route='uploads'):
     original_name = str(filename or '').strip()
     cleaned = clean_filename(original_name)
@@ -498,3 +571,110 @@ def list_uploads():
 @email_upload_bp.route("/api/uploads/<path:filename>", methods=["GET"])  # parallel API path
 def get_upload(filename):
     return send_from_directory(_uploads_dir(), filename)
+
+
+@email_upload_bp.route('/api/files/<path:file_id>', methods=['PATCH'])
+def update_file_metadata(file_id):
+    target = _resolve_file_id(file_id)
+    if not target:
+        return jsonify({'error': 'Invalid file id.'}), 400
+
+    if not os.path.isfile(target['path']):
+        return jsonify({'error': 'File not found.'}), 404
+
+    payload = request.get_json(silent=True) or {}
+    new_name = str(payload.get('name') or '').strip()
+    new_category = str(payload.get('category') or '').strip()
+    raw_tags = payload.get('tags')
+
+    directory = target['directory']
+    filename = target['filename']
+    category = target['category']
+    path = target['path']
+    metadata = _read_directory_metadata(directory, filename)
+
+    if isinstance(raw_tags, list):
+        metadata['tags'] = sorted({str(tag or '').strip().lower() for tag in raw_tags if str(tag or '').strip()})
+
+    if new_name:
+        clean_new_name = clean_filename(new_name)
+        if not clean_new_name:
+            return jsonify({'error': 'Invalid file name.'}), 400
+        old_ext = os.path.splitext(filename)[1].lower()
+        next_ext = os.path.splitext(clean_new_name)[1].lower()
+        if old_ext and not next_ext:
+            clean_new_name = f'{clean_new_name}{old_ext}'
+        if clean_new_name != filename:
+            next_path = os.path.join(directory, clean_new_name)
+            if os.path.exists(next_path):
+                return jsonify({'error': 'A file with this name already exists.'}), 409
+            os.replace(path, next_path)
+            old_meta_path = _metadata_path_for_directory(directory, filename)
+            next_meta_path = _metadata_path_for_directory(directory, clean_new_name)
+            if os.path.exists(old_meta_path):
+                os.replace(old_meta_path, next_meta_path)
+            filename = clean_new_name
+            path = next_path
+            metadata['originalName'] = new_name
+
+    if target['route'] == 'kb' and new_category:
+        clean_category = clean_filename(new_category).lower()
+        if not clean_category:
+            return jsonify({'error': 'Invalid category.'}), 400
+        if clean_category != category:
+            next_directory = get_kb_category_dir(clean_category)
+            os.makedirs(next_directory, exist_ok=True)
+            next_path = os.path.join(next_directory, filename)
+            if os.path.exists(next_path):
+                return jsonify({'error': 'A file with this name already exists in the target category.'}), 409
+            os.replace(path, next_path)
+            old_meta_path = _metadata_path_for_directory(directory, filename)
+            next_meta_path = _metadata_path_for_directory(next_directory, filename)
+            if os.path.exists(old_meta_path):
+                os.replace(old_meta_path, next_meta_path)
+            directory = next_directory
+            category = clean_category
+            path = next_path
+        metadata['category'] = clean_category
+    elif target['route'] == 'uploads' and new_category:
+        metadata['category'] = new_category
+
+    _write_upload_metadata_for_directory(
+        directory,
+        filename,
+        metadata.get('source') or ('email' if target['route'] == 'kb' else 'manual'),
+        recipient=metadata.get('recipient'),
+        route=target['route'],
+        original_name=metadata.get('originalName') or filename,
+    )
+    current_meta = _read_directory_metadata(directory, filename)
+    if isinstance(metadata.get('tags'), list):
+        current_meta['tags'] = metadata['tags']
+    if metadata.get('category'):
+        current_meta['category'] = metadata['category']
+    with open(_metadata_path_for_directory(directory, filename), 'w', encoding='utf-8') as handle:
+        json.dump(current_meta, handle)
+
+    return jsonify(
+        {
+            'success': True,
+            'data': _serialize_file_record(target['route'], directory, filename, category=category),
+        }
+    )
+
+
+@email_upload_bp.route('/api/files/<path:file_id>', methods=['DELETE'])
+def delete_file(file_id):
+    target = _resolve_file_id(file_id)
+    if not target:
+        return jsonify({'error': 'Invalid file id.'}), 400
+
+    if not os.path.isfile(target['path']):
+        return jsonify({'error': 'File not found.'}), 404
+
+    os.remove(target['path'])
+    meta_path = _metadata_path_for_directory(target['directory'], target['filename'])
+    if os.path.exists(meta_path):
+        os.remove(meta_path)
+
+    return jsonify({'success': True})

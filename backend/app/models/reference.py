@@ -57,10 +57,24 @@ class AIDocument(Base):
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+class AIAnalysis(Base):
+    __tablename__ = 'ai_analysis'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    document_name = Column(String, nullable=False)
+    raw_text = Column(Text, nullable=False)
+    full_analysis = Column(Text, nullable=False)
+    quick_summary = Column(Text, nullable=False)
+    input_tokens = Column(Integer, nullable=False, default=0)
+    output_tokens = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 def init_db():
     """Create tables if they do not exist yet."""
     Base.metadata.create_all(engine)
     _ensure_reference_group_columns()
+    _ensure_ai_analysis_columns()
 
 
 def _ensure_reference_group_columns():
@@ -75,6 +89,27 @@ def _ensure_reference_group_columns():
         statements.append('ALTER TABLE ref_groups ADD COLUMN description TEXT')
     if 'tags' not in columns:
         statements.append('ALTER TABLE ref_groups ADD COLUMN tags TEXT')
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def _ensure_ai_analysis_columns():
+    inspector = inspect(engine)
+    try:
+        columns = {column['name'] for column in inspector.get_columns('ai_analysis')}
+    except Exception:
+        return
+
+    statements = []
+    if 'input_tokens' not in columns:
+        statements.append('ALTER TABLE ai_analysis ADD COLUMN input_tokens INTEGER NOT NULL DEFAULT 0')
+    if 'output_tokens' not in columns:
+        statements.append('ALTER TABLE ai_analysis ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0')
 
     if not statements:
         return

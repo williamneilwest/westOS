@@ -17,6 +17,13 @@ def _request_model(payload):
     return current_app.config['LITELLM_MODEL']
 
 
+def _request_max_tokens(payload):
+    try:
+        return int(payload.get('max_tokens', 12000))
+    except (TypeError, ValueError):
+        return 12000
+
+
 @chat_bp.post('/ai/chat')
 @chat_bp.post('/api/ai/chat')
 @chat_bp.post('/chat')
@@ -27,7 +34,7 @@ def chat():
             payload=payload,
             model=_request_model(payload),
             temperature=current_app.config['LITELLM_TEMPERATURE'],
-            max_tokens=current_app.config['LITELLM_MAX_TOKENS'],
+            max_tokens=_request_max_tokens(payload),
             api_base=current_app.config['OLLAMA_API_BASE'],
         )
         return jsonify(build_compat_chat_response(payload, result))
@@ -48,7 +55,7 @@ def openai_chat():
             payload=payload,
             model=_request_model(payload),
             temperature=current_app.config['LITELLM_TEMPERATURE'],
-            max_tokens=current_app.config['LITELLM_MAX_TOKENS'],
+            max_tokens=_request_max_tokens(payload),
             api_base=current_app.config['OLLAMA_API_BASE'],
         )
         return jsonify(build_openai_chat_response(result))

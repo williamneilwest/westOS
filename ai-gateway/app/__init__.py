@@ -10,12 +10,12 @@ from .services.chat import warmup_chat_completion
 def create_app():
     load_dotenv()
     app = Flask(__name__)
+    default_model = os.getenv('OPENAI_MODEL', os.getenv('LITELLM_MODEL', 'ollama/mistral'))
+    default_temperature = os.getenv('OPENAI_TEMPERATURE', os.getenv('LITELLM_TEMPERATURE', '0.2'))
     app.config.from_mapping(
         APP_NAME=os.getenv('APP_NAME', 'westOS AI Gateway'),
-        LITELLM_MODEL=os.getenv('LITELLM_MODEL', 'ollama/mistral'),
-        LITELLM_TEMPERATURE=float(os.getenv('LITELLM_TEMPERATURE', '0.2')),
-        # Increase default to avoid unintentional truncation; still overridable via env
-        LITELLM_MAX_TOKENS=int(os.getenv('LITELLM_MAX_TOKENS', '1024')),
+        LITELLM_MODEL=default_model,
+        LITELLM_TEMPERATURE=float(default_temperature),
         OLLAMA_API_BASE=os.getenv('OLLAMA_API_BASE', 'http://host.docker.internal:11434'),
     )
 
@@ -23,7 +23,6 @@ def create_app():
         warmup_chat_completion(
             app.config['LITELLM_MODEL'],
             app.config['LITELLM_TEMPERATURE'],
-            app.config['LITELLM_MAX_TOKENS'],
             app.config['OLLAMA_API_BASE'],
         )
     except Exception as error:

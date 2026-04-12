@@ -1355,6 +1355,106 @@ textarea {
   word-break: break-word;
 }
 
+.document-analysis-tabs {
+  margin: 0.25rem 0 0.9rem;
+}
+
+.ai-raw-response {
+  max-height: 70vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-soft);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.token-usage {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-soft);
+  opacity: 0.72;
+  transition: opacity 160ms ease, border-color 160ms ease;
+}
+
+.token-usage:hover {
+  opacity: 1;
+  border-color: rgba(16, 185, 129, 0.32);
+}
+
+.token-usage__tooltip {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  min-width: 11rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  background: rgba(7, 12, 10, 0.97);
+  box-shadow: var(--shadow-soft);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-3px);
+  transition: opacity 160ms ease, transform 160ms ease;
+  z-index: 20;
+}
+
+.token-usage:hover .token-usage__tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.token-usage__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
+.token-usage__row + .token-usage__row {
+  margin-top: 0.28rem;
+}
+
+.token-usage__row strong {
+  font-family: "IBM Plex Mono", monospace;
+  color: var(--text);
+}
+
+.document-details-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.document-details-grid .table-filter {
+  width: 100%;
+}
+
+.document-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-height: 1.65rem;
+}
+
+.document-tag-chip {
+  border: 0;
+  cursor: pointer;
+}
+
 .stack-row--interactive {
   width: 100%;
   color: inherit;
@@ -2505,6 +2605,15 @@ textarea {
 
 .settings-field input,
 .association-script {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 0.8rem 0.9rem;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.settings-field select {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
