@@ -101,7 +101,7 @@ export function analyzeKbDocument(category, filename) {
   });
 }
 
-export function analyzeDocumentWithAi({ documentText = '', documentName = '', documentUrl = '', rerun = false } = {}) {
+export function analyzeDocumentWithAi({ documentText = '', documentName = '', documentUrl = '', rerun = false, lookupOnly = false } = {}) {
   return request(backendBaseUrl, '/api/ai/analyze-document', {
     method: 'POST',
     headers: {
@@ -112,6 +112,7 @@ export function analyzeDocumentWithAi({ documentText = '', documentName = '', do
       documentName,
       documentUrl,
       rerun,
+      lookupOnly,
     })
   });
 }

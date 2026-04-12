@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Brain, Download, ExternalLink, FileText, RefreshCcw, Trash2 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { analyzeDocumentWithAi, deleteFileById, updateFileById } from '../../app/services/api';
@@ -56,7 +56,8 @@ function extractAnalysis(payload) {
   const data = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
   const raw = String(data?.raw || data?.full_analysis || data?.quick_summary || '').trim();
   const tokenUsage = data?.token_usage && typeof data.token_usage === 'object' ? data.token_usage : null;
-  return { raw, tokenUsage };
+  const found = data?.found === false ? false : Boolean(raw);
+  return { raw, tokenUsage, found };
 }
 
 export function DocumentPage() {
@@ -73,7 +74,10 @@ export function DocumentPage() {
   const [analysisText, setAnalysisText] = useState('');
   const [tokenUsage, setTokenUsage] = useState(null);
   const [analysisError, setAnalysisError] = useState('');
+  const [analysisNotice, setAnalysisNotice] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(false);
+  const [hasExistingAnalysis, setHasExistingAnalysis] = useState(false);
   const [activeTab, setActiveTab] = useState('ai');
   const [editableName, setEditableName] = useState(initialFileName);
   const [editableCategory, setEditableCategory] = useState(parseCategory(initialFileUrl, title));
@@ -109,6 +113,7 @@ export function DocumentPage() {
 
   async function runAnalysis(rerun = true) {
     setAnalysisError('');
+    setAnalysisNotice('');
     setAnalysisText('');
     setTokenUsage(null);
     setAnalyzing(true);
@@ -130,6 +135,7 @@ export function DocumentPage() {
       const result = extractAnalysis(payload);
       setAnalysisText(result.raw);
       setTokenUsage(result.tokenUsage);
+      setHasExistingAnalysis(Boolean(result.found));
 
       if (!result.raw) {
         setAnalysisError('AI analysis completed but no content was returned.');
@@ -140,6 +146,50 @@ export function DocumentPage() {
       setAnalyzing(false);
     }
   }
+
+  async function loadExistingAnalysis({ showMissingNotice = false } = {}) {
+    setAnalysisError('');
+    setAnalysisNotice('');
+    setLoadingExisting(true);
+
+    try {
+      const payload = await analyzeDocumentWithAi({
+        documentText: '',
+        documentName: currentFileName || title || 'Untitled Document',
+        documentUrl: currentFileUrl,
+        rerun: false,
+        lookupOnly: true,
+      });
+      const result = extractAnalysis(payload);
+      setHasExistingAnalysis(Boolean(result.found));
+
+      if (!result.found) {
+        if (showMissingNotice) {
+          setAnalysisNotice('No existing analysis found for this document yet.');
+        }
+        return;
+      }
+
+      setAnalysisText(result.raw);
+      setTokenUsage(result.tokenUsage);
+      setActiveTab('ai');
+      setAnalysisNotice('Loaded existing analysis.');
+    } catch (requestError) {
+      setHasExistingAnalysis(false);
+      if (showMissingNotice) {
+        setAnalysisError(requestError?.message || 'Existing analysis could not be loaded.');
+      }
+    } finally {
+      setLoadingExisting(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!currentFileUrl) {
+      return;
+    }
+    void loadExistingAnalysis();
+  }, [currentFileName, currentFileUrl, title]);
 
   async function saveRename() {
     setSavingDetails(true);
@@ -267,6 +317,7 @@ export function DocumentPage() {
         </div>
 
         {analysisError ? <p className="status-text status-text--error">{analysisError}</p> : null}
+        {analysisNotice ? <p className="status-text">{analysisNotice}</p> : null}
         {detailsError ? <p className="status-text status-text--error">{detailsError}</p> : null}
         {detailsMessage ? <p className="status-text status-text--success">{detailsMessage}</p> : null}
 
@@ -340,6 +391,14 @@ export function DocumentPage() {
 
         {activeTab === 'actions' ? (
           <div className="table-actions">
+            <button
+              type="button"
+              className="compact-toggle"
+              disabled={loadingExisting}
+              onClick={() => void loadExistingAnalysis({ showMissingNotice: true })}
+            >
+              {loadingExisting ? 'Loading…' : 'View Existing'}
+            </button>
             <button type="button" className="compact-toggle" disabled={analyzing} onClick={() => void runAnalysis(true)}>
               <RefreshCcw size={14} />
               Re-analyze
@@ -375,6 +434,14 @@ export function DocumentPage() {
               >
                 <Brain size={15} />
                 {analyzing ? 'Analyzing...' : 'Analyze with AI'}
+              </button>
+              <button
+                type="button"
+                className={`compact-toggle${hasExistingAnalysis ? ' compact-toggle--active' : ''}`}
+                disabled={loadingExisting}
+                onClick={() => void loadExistingAnalysis({ showMissingNotice: true })}
+              >
+                {loadingExisting ? 'Loading…' : 'View Existing'}
               </button>
               <a className="compact-toggle" href={previewUrl} rel="noreferrer" target="_blank">
                 <ExternalLink size={15} />

@@ -1718,6 +1718,12 @@ textarea {
   color: var(--text);
 }
 
+.kb-chip--analysis {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.14);
+  color: #bfdbfe;
+}
+
 .kb-file-row__hint {
   color: var(--text-soft);
   font-size: 0.78rem;

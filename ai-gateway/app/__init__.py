@@ -10,7 +10,8 @@ from .services.chat import warmup_chat_completion
 def create_app():
     load_dotenv()
     app = Flask(__name__)
-    default_model = os.getenv('OPENAI_MODEL', os.getenv('LITELLM_MODEL', 'ollama/mistral'))
+    # Prefer gateway-specific model configuration; OPENAI_MODEL is shared with backend.
+    default_model = os.getenv('LITELLM_MODEL', os.getenv('OPENAI_MODEL', 'ollama/mistral'))
     default_temperature = os.getenv('OPENAI_TEMPERATURE', os.getenv('LITELLM_TEMPERATURE', '0.2'))
     app.config.from_mapping(
         APP_NAME=os.getenv('APP_NAME', 'westOS AI Gateway'),

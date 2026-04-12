@@ -1,4 +1,5 @@
 import logging
+import os
 from time import perf_counter
 
 from litellm import completion
@@ -7,8 +8,23 @@ from litellm import completion
 LOGGER = logging.getLogger(__name__)
 
 
+def _resolve_model(model, api_base):
+    normalized = str(model or '').strip()
+    if not normalized:
+        return normalized
+
+    if normalized == 'mistral' or normalized.startswith('ollama/'):
+        raise RuntimeError('Ollama is disabled. Configure an OpenAI model instead.')
+
+    if normalized.startswith('openai/'):
+        return normalized
+
+    # Normalize bare model ids (e.g. "gpt-4o") to explicit OpenAI provider format.
+    return f'openai/{normalized}'
+
+
 def _uses_ollama(model, api_base):
-    return bool(api_base) and (model == 'mistral' or model.startswith('ollama/'))
+    return False
 
 
 def _extract_message_content(message):
@@ -55,7 +71,8 @@ def clean_ai_output(text):
 
 
 def run_chat_completion(payload, model, temperature, max_tokens, api_base):
-    if not model:
+    resolved_model = _resolve_model(model, api_base)
+    if not resolved_model:
         raise RuntimeError('LiteLLM model is not configured. Set LITELLM_MODEL in the environment.')
 
     messages = _normalize_messages(payload)
@@ -67,14 +84,14 @@ def run_chat_completion(payload, model, temperature, max_tokens, api_base):
     request_max_tokens = int(payload.get('max_tokens', max_tokens))
 
     request_kwargs = {
-        'model': model,
+        'model': resolved_model,
         'messages': messages,
         'temperature': request_temperature,
         'max_tokens': request_max_tokens,
         'stream': False,
     }
 
-    if _uses_ollama(model, api_base):
+    if _uses_ollama(resolved_model, api_base):
         request_kwargs['api_base'] = api_base
         request_kwargs['extra_body'] = {
             'keep_alive': -1,
@@ -87,36 +104,37 @@ def run_chat_completion(payload, model, temperature, max_tokens, api_base):
         }
 
     started_at = perf_counter()
-    LOGGER.info('Starting AI request for model %s', model)
+    LOGGER.info('Starting AI request for model %s', resolved_model)
 
     try:
         response = completion(**request_kwargs)
     except Exception as error:
-        LOGGER.info('AI request failed for model %s in %.2fs', model, perf_counter() - started_at)
-        if _uses_ollama(model, api_base):
+        LOGGER.info('AI request failed for model %s in %.2fs', resolved_model, perf_counter() - started_at)
+        if _uses_ollama(resolved_model, api_base):
             raise RuntimeError(
                 'LiteLLM could not reach Ollama. Verify OLLAMA_API_BASE and that the Ollama server is running.'
             ) from error
         raise RuntimeError(f'LiteLLM request failed: {error}') from error
 
-    LOGGER.info('AI request finished for model %s in %.2fs', model, perf_counter() - started_at)
+    LOGGER.info('AI request finished for model %s in %.2fs', resolved_model, perf_counter() - started_at)
 
     return response.model_dump() if hasattr(response, 'model_dump') else response
 
 
 def warmup_chat_completion(model, temperature, api_base):
-    if not model:
+    resolved_model = _resolve_model(model, api_base)
+    if not resolved_model:
         return
 
     request_kwargs = {
-        'model': model,
+        'model': resolved_model,
         'messages': [{'role': 'user', 'content': 'warmup'}],
         'temperature': float(temperature),
         'max_tokens': 1,
         'stream': False,
     }
 
-    if _uses_ollama(model, api_base):
+    if _uses_ollama(resolved_model, api_base):
         request_kwargs['api_base'] = api_base
         request_kwargs['extra_body'] = {
             'keep_alive': -1,

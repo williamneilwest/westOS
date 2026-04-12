@@ -12,6 +12,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   analyzeCsvFile,
+  getKnowledgeBase,
   getLatestTickets,
   getRecentCsvAnalyses,
   getRecentCsvAnalysisFile,
@@ -28,7 +29,7 @@ import { getStoredVisibleColumns, setStoredVisibleColumns } from '../tables/tabl
 import { TicketCard } from './components/TicketCard';
 import { getCachedWorkDataset, parseCsvText, setCachedWorkDataset } from './workDatasetCache';
 import { dedupeNotes, getTicketAssignee, getTicketColumns, getTicketId, isSuppressedTicketColumn } from './utils/aiAnalysis';
-import { buildTicketRuleText, matchTicketRules } from './utils/ticketRules';
+import { buildTicketRuleText, collectKbTagWordsFromKnowledgeBase, matchTicketRules } from './utils/ticketRules';
 
 const DEFAULT_CARD_ASSIGNEE = 'William West';
 const VIEW_STORAGE_KEY = STORAGE_KEYS.TICKET_VIEW;
@@ -566,6 +567,7 @@ export function WorkPage() {
   const [debouncedRowFilter, setDebouncedRowFilter] = useState('');
   const [selectedRow, setSelectedRow] = useState(null);
   const [isLoadingSavedRun, setIsLoadingSavedRun] = useState(false);
+  const [kbTagWords, setKbTagWords] = useState([]);
   const csvUploads = useMemo(
     () =>
       uploadedFiles.filter((file) => {
@@ -680,6 +682,29 @@ export function WorkPage() {
       isMounted = false;
     };
   }, [isActiveTicketsRoute]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadKbTagWords() {
+      try {
+        const payload = await getKnowledgeBase();
+        if (isMounted) {
+          setKbTagWords(collectKbTagWordsFromKnowledgeBase(payload));
+        }
+      } catch {
+        if (isMounted) {
+          setKbTagWords([]);
+        }
+      }
+    }
+
+    void loadKbTagWords();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isActiveTicketsRoute) {
@@ -903,9 +928,12 @@ export function WorkPage() {
     () =>
       datasetRows.map((ticket) => ({
         ticket,
-        matchedRules: matchTicketRules(buildTicketRuleText(ticket, datasetColumns, datasetDescriptionColumn)),
+        matchedRules: matchTicketRules(
+          buildTicketRuleText(ticket, datasetColumns, datasetDescriptionColumn),
+          { kbTagWords }
+        ),
       })),
-    [datasetColumns, datasetDescriptionColumn, datasetRows]
+    [datasetColumns, datasetDescriptionColumn, datasetRows, kbTagWords]
   );
   const visibleTickets = useMemo(
     () =>

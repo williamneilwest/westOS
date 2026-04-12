@@ -57,7 +57,10 @@ def _gateway_payload(payload):
 def _run_model_prompt(prompt, analysis_mode='preview'):
     payload = _gateway_payload({'message': prompt, 'analysis_mode': analysis_mode})
     result = call_gateway_chat(payload, current_app.config['AI_GATEWAY_BASE_URL'])
-    return result.get('message', '')
+    # `call_gateway_chat` returns an OpenAI-style completion payload.
+    # Normalize through compat helper so callers always get plain text.
+    compat = build_compat_chat_response(payload, result)
+    return compat.get('message', '')
 
 
 def _extract_document_path(document_url):
@@ -307,6 +310,7 @@ def analyze_document_endpoint():
     document_name = str(payload.get('documentName') or '').strip() or 'Untitled Document'
     document_url = str(payload.get('documentUrl') or '').strip()
     rerun = bool(payload.get('rerun', True))
+    lookup_only = bool(payload.get('lookupOnly') or payload.get('lookup_only'))
     resolved_path = _extract_document_path(document_url)
 
     if not document_text and resolved_path and os.path.isfile(resolved_path):
@@ -318,7 +322,7 @@ def analyze_document_endpoint():
 
     session = SessionLocal()
     try:
-        if not rerun:
+        if (not rerun) or lookup_only:
             existing = (
                 session.query(AIAnalysis)
                 .filter(AIAnalysis.document_name == document_name, AIAnalysis.raw_text == document_text)
@@ -359,6 +363,28 @@ def analyze_document_endpoint():
                             },
                             'created_at': existing.created_at.isoformat() if existing.created_at else None,
                             'cached': True,
+                            'found': True,
+                        },
+                    }
+                )
+            if lookup_only:
+                return jsonify(
+                    {
+                        'success': True,
+                        'data': {
+                            'id': None,
+                            'document_name': document_name,
+                            'full_analysis': '',
+                            'quick_summary': '',
+                            'raw': '',
+                            'token_usage': {
+                                'input': 0,
+                                'output': 0,
+                                'total': 0,
+                            },
+                            'created_at': None,
+                            'cached': False,
+                            'found': False,
                         },
                     }
                 )
@@ -423,6 +449,7 @@ def analyze_document_endpoint():
                     },
                     'created_at': record.created_at.isoformat() if record.created_at else None,
                     'cached': False,
+                    'found': True,
                 },
             }
         )

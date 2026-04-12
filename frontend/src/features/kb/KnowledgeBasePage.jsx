@@ -114,7 +114,14 @@ export function KnowledgeBasePage() {
     }
   }
 
-  async function handleAnalyze(category, fileName) {
+  async function handleAnalyze(category, fileName, existingAnalysis = null) {
+    const existingDocumentId = Number(existingAnalysis?.documentId || existingAnalysis?.analysisId || 0);
+    if (existingDocumentId > 0) {
+      setMessage('Loaded previous analysis from metadata.');
+      navigate(`/app/ai/documents/${existingDocumentId}`);
+      return;
+    }
+
     setMessage('');
     setError('');
     setSubmitting(true);
@@ -211,6 +218,7 @@ export function KnowledgeBasePage() {
                     const visibleFileTags = fileTags.slice(0, 5);
                     const hiddenTagCount = Math.max(0, fileTags.length - visibleFileTags.length);
                     const subtitle = `${formatDateShort(file.modifiedAt)} • ${formatMimeLabel(file.filename, file.mimeType)} • ${formatCategoryLabel(selectedCategory?.category || '')}`;
+                    const hasAnalysis = Boolean(Number(file.analysis?.documentId || file.analysis?.analysisId || 0));
 
                     return (
                       <article className="kb-file-row" key={file.filename}>
@@ -233,6 +241,11 @@ export function KnowledgeBasePage() {
                               {hiddenTagCount > 0 ? <span className="kb-chip kb-chip--more">+{hiddenTagCount} more</span> : null}
                             </div>
                           ) : <small className="kb-file-row__hint">No tags</small>}
+                          {hasAnalysis ? (
+                            <div className="kb-chip-row">
+                              <span className="kb-chip kb-chip--analysis">Analyzed</span>
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="kb-file-row__right">
@@ -244,7 +257,7 @@ export function KnowledgeBasePage() {
                             type="button"
                             className="compact-toggle kb-action kb-action--secondary"
                             disabled={submitting}
-                            onClick={() => void handleAnalyze(selectedCategory.category, file.filename)}
+                            onClick={() => void handleAnalyze(selectedCategory.category, file.filename, file.analysis)}
                           >
                             {submitting ? 'Analyzing…' : 'Analyze'}
                           </button>

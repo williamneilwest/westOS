@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Clock3, MessageSquareText, ShieldCheck, ShieldX, Sparkles, UserRound } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { getReferenceGroups, getReferenceUsers, getTicket, getUserGroups, sendAiChat } from '../../../app/services/api';
+import { getKnowledgeBase, getReferenceGroups, getReferenceUsers, getTicket, getUserGroups, sendAiChat } from '../../../app/services/api';
 import { Card, CardHeader } from '../../../app/ui/Card';
 import { EmptyState } from '../../../app/ui/EmptyState';
 import { getCachedWorkDataset, setCachedWorkDataset } from '../workDatasetCache';
@@ -18,7 +18,7 @@ import {
   parseTicketAiAnalysis,
   updateTicketAnalysis,
 } from '../utils/aiAnalysis';
-import { buildTicketRuleText, matchTicketRules } from '../utils/ticketRules';
+import { buildTicketRuleText, collectKbTagWordsFromKnowledgeBase, matchTicketRules } from '../utils/ticketRules';
 
 const USER_LOOKUP_PATTERNS = [
   /opid/i,
@@ -174,6 +174,7 @@ export function TicketDetail() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isLoadingTicket, setIsLoadingTicket] = useState(false);
+  const [kbTagWords, setKbTagWords] = useState([]);
   const [responderAccess, setResponderAccess] = useState({
     loading: false,
     error: '',
@@ -193,8 +194,8 @@ export function TicketDetail() {
       return [];
     }
 
-    return matchTicketRules(buildTicketRuleText(ticket, columns));
-  }, [ticket, columns]);
+    return matchTicketRules(buildTicketRuleText(ticket, columns), { kbTagWords });
+  }, [ticket, columns, kbTagWords]);
   const responderRule = useMemo(
     () => matchedRules.find((rule) => rule.id === 'responder_group') || null,
     [matchedRules]
@@ -256,6 +257,29 @@ export function TicketDetail() {
       isMounted = false;
     };
   }, [decodedTicketId, ticket]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadKbTagWords() {
+      try {
+        const payload = await getKnowledgeBase();
+        if (isMounted) {
+          setKbTagWords(collectKbTagWordsFromKnowledgeBase(payload));
+        }
+      } catch {
+        if (isMounted) {
+          setKbTagWords([]);
+        }
+      }
+    }
+
+    void loadKbTagWords();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;

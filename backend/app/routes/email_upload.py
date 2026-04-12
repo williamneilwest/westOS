@@ -9,6 +9,7 @@ import logging
 from flask import Blueprint, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
+from ..services.tag_derivation import derive_tags
 from ..utils.storage import get_kb_category_dir, get_uploads_dir
 
 email_upload_bp = Blueprint("email_upload", __name__)
@@ -302,6 +303,20 @@ def _build_kb_file_url(filename: str, category: str = 'uncategorized') -> str:
     return f"/kb/{safe_category}/{filename}"
 
 
+def _compute_kb_derived_tags_from_metadata(category: str, filename: str, metadata: dict) -> dict:
+    tags = metadata.get('tags') if isinstance(metadata.get('tags'), list) else []
+    return derive_tags(
+        existing_tags=[str(tag or '').strip().lower() for tag in tags if str(tag or '').strip()],
+        document_fields={
+            'category': category,
+            'filename': filename,
+            'original_name': metadata.get('originalName') or filename,
+            'subject': metadata.get('subject') or '',
+            'summary': (metadata.get('analysis') or {}).get('summary') if isinstance(metadata.get('analysis'), dict) else '',
+        },
+    )
+
+
 def _resolve_file_id(file_id: str):
     raw = str(file_id or '').strip().lstrip('/')
     if not raw:
@@ -361,6 +376,9 @@ def _serialize_file_record(route, directory, filename, category=''):
     tags = metadata.get('tags')
     if not isinstance(tags, list):
         tags = []
+    derived_tags = metadata.get('derived_tags_v1') if isinstance(metadata.get('derived_tags_v1'), dict) else {}
+    if route == 'kb' and not derived_tags:
+        derived_tags = _compute_kb_derived_tags_from_metadata(category or metadata.get('category') or '', filename, metadata)
 
     return {
         'id': url.lstrip('/'),
@@ -372,6 +390,7 @@ def _serialize_file_record(route, directory, filename, category=''):
         'mimeType': mime_type or 'application/octet-stream',
         'category': category or metadata.get('category') or '',
         'tags': tags,
+        'derived_tags': derived_tags if route == 'kb' else {},
     }
 
 
@@ -652,6 +671,12 @@ def update_file_metadata(file_id):
         current_meta['tags'] = metadata['tags']
     if metadata.get('category'):
         current_meta['category'] = metadata['category']
+    if target['route'] == 'kb':
+        current_meta['derived_tags_v1'] = _compute_kb_derived_tags_from_metadata(
+            category or current_meta.get('category') or '',
+            filename,
+            current_meta,
+        )
     with open(_metadata_path_for_directory(directory, filename), 'w', encoding='utf-8') as handle:
         json.dump(current_meta, handle)
 

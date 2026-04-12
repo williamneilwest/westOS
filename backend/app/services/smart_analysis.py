@@ -410,23 +410,40 @@ def format_deep_message(parsed):
     work_performed = parsed.get('work_performed') or parsed.get('workPerformed') or []
     if isinstance(work_performed, str):
         work_performed = [work_performed]
+    work_performed = [_normalize_value(item) for item in work_performed if _normalize_value(item)]
     comments = parsed.get('insights') or []
     if isinstance(comments, str):
         comments = [comments]
-    status_lines = [
-        parsed.get('current_status') or parsed.get('currentStatus') or '',
-        f"Root cause: {parsed.get('root_cause') or parsed.get('rootCause') or 'Unknown'}",
-        f"Blocker: {parsed.get('blocker') or 'None'}",
-        f"Next step: {parsed.get('next_step') or parsed.get('nextStep') or 'Unspecified'}",
-        f"Stalled: {parsed.get('stalled')}",
-    ]
-    status = '\n'.join([line for line in status_lines if _normalize_value(line)])
+    comments = [_normalize_value(item) for item in comments if _normalize_value(item)]
 
-    lines = ['Summary:', summary or 'No summary returned.', '', 'work Notes:']
-    lines.extend([f'- {item}' for item in work_performed] or ['- No work notes returned.'])
-    lines.extend(['', 'Comments:'])
-    lines.extend([f'- {item}' for item in comments] or ['- No comments returned.'])
-    lines.extend(['', 'Status:', status or 'No status returned.'])
+    current_status = _normalize_value(parsed.get('current_status') or parsed.get('currentStatus'))
+    root_cause = _normalize_value(parsed.get('root_cause') or parsed.get('rootCause'))
+    blocker = _normalize_value(parsed.get('blocker'))
+    next_step = _normalize_value(parsed.get('next_step') or parsed.get('nextStep'))
+    stalled = _normalize_value(parsed.get('stalled'))
+
+    status_lines = []
+    if current_status:
+        status_lines.append(current_status)
+    if root_cause and root_cause.lower() not in {'unknown', 'none', 'n/a', 'na'}:
+        status_lines.append(f'Root cause: {root_cause}')
+    if blocker and blocker.lower() not in {'none', 'n/a', 'na'}:
+        status_lines.append(f'Blocker: {blocker}')
+    if next_step and next_step.lower() not in {'unspecified', 'none', 'n/a', 'na'}:
+        status_lines.append(f'Next step: {next_step}')
+    if stalled and stalled.lower() not in {'none', 'unknown', 'n/a', 'na'}:
+        status_lines.append(f'Stalled: {stalled}')
+
+    lines = ['Summary:', summary or 'No summary returned.']
+    if work_performed:
+        lines.extend(['', 'Work Notes:'])
+        lines.extend([f'- {item}' for item in work_performed])
+    if comments:
+        lines.extend(['', 'Comments:'])
+        lines.extend([f'- {item}' for item in comments])
+    if status_lines:
+        lines.extend(['', 'Status:'])
+        lines.extend(status_lines)
     return '\n'.join(lines)
 
 

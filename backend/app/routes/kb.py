@@ -12,6 +12,8 @@ from typing import Optional
 from .email_upload import clean_filename, extract_original_name, rotate_stored_file_versions
 from ..services.document_parser import run_document_processing_task, parse_document
 from ..services.document_ai import analyze_document
+from ..services.tag_derivation import derive_tags
+from ..services.ticket_match import match_ticket_to_kb
 from ..models.reference import AIDocument, SessionLocal, init_db
 from ..utils.storage import get_kb_category_dir, get_kb_dir
 
@@ -60,7 +62,26 @@ def _kb_write_analysis_metadata(category: str, filename: str, analysis_payload: 
     existing = _kb_read_metadata(category, filename)
     merged = dict(existing)
     merged["analysis"] = analysis_payload
+    merged["derived_tags_v1"] = _compute_derived_tags_for_metadata(category, filename, merged)
     _kb_write_metadata(category, filename, merged)
+
+
+def _safe_tag_list(value) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(tag or "").strip().lower() for tag in value if str(tag or "").strip()]
+
+
+def _compute_derived_tags_for_metadata(category: str, filename: str, metadata: dict) -> dict:
+    original_name = metadata.get("originalName") or extract_original_name(filename)
+    source_fields = {
+        "category": category,
+        "filename": filename,
+        "original_name": original_name,
+        "subject": metadata.get("subject") or "",
+        "summary": (metadata.get("analysis") or {}).get("summary") if isinstance(metadata.get("analysis"), dict) else "",
+    }
+    return derive_tags(existing_tags=_safe_tag_list(metadata.get("tags")), document_fields=source_fields)
 
 
 def _determine_category(original_name: str, mail_subject=None) -> str:
@@ -151,6 +172,95 @@ def _queue_document_processing(app, path: str):
     worker.start()
 
 
+def _list_kb_categories(q_tags: list[str] | None = None) -> list[dict]:
+    categories = []
+    q_tags = q_tags or []
+
+    try:
+        cat_names = sorted(os.listdir(get_kb_dir()))
+    except OSError:
+        cat_names = []
+
+    for cat in cat_names:
+        if cat == 'processed':
+            continue
+
+        cat_dir = os.path.join(get_kb_dir(), cat)
+        if not os.path.isdir(cat_dir):
+            continue
+
+        items = []
+        try:
+            names = os.listdir(cat_dir)
+        except OSError:
+            names = []
+
+        for name in names:
+            if name.endswith('.meta.json'):
+                continue
+            full_path = os.path.join(cat_dir, name)
+            if not os.path.isfile(full_path):
+                continue
+
+            try:
+                modified_ts = os.path.getmtime(full_path)
+            except OSError:
+                modified_ts = 0
+
+            metadata = _kb_read_metadata(cat, name)
+            original_name = metadata.get("originalName") or extract_original_name(name)
+            subject = metadata.get("subject")
+            tags = metadata.get("tags")
+            if not isinstance(tags, list):
+                tags = _derive_tags(cat, original_name, subject)
+
+            # Optional filtering by tags
+            if q_tags and not any((t or "").lower() in q_tags for t in tags):
+                continue
+
+            mime, _ = mimetypes.guess_type(name)
+            size = None
+            try:
+                size = os.path.getsize(full_path)
+            except OSError:
+                pass
+
+            derived_tags = metadata.get("derived_tags_v1")
+            if not isinstance(derived_tags, dict):
+                derived_tags = _compute_derived_tags_for_metadata(
+                    cat,
+                    name,
+                    {
+                        **metadata,
+                        "originalName": original_name,
+                        "subject": subject,
+                        "tags": tags,
+                    },
+                )
+
+            items.append({
+                "filename": name,
+                "originalName": original_name,
+                "url": _build_kb_url(cat, name),
+                "modifiedAt": datetime.fromtimestamp(modified_ts, tz=timezone.utc).isoformat() if modified_ts else None,
+                "mimeType": mime or "application/octet-stream",
+                "size": size,
+                "source": metadata.get("source") or "email",
+                "tags": tags,
+                "derived_tags": derived_tags,
+                "analysis": metadata.get("analysis") if isinstance(metadata.get("analysis"), dict) else None,
+            })
+
+        items.sort(key=lambda x: (x["modifiedAt"] or ""), reverse=True)
+        categories.append({
+            "category": cat,
+            "files": items,
+        })
+
+    categories.sort(key=lambda x: x["category"])
+    return categories
+
+
 @kb_bp.route("/webhooks/kb", methods=["POST"])
 def handle_kb_email():
     """Accept email attachments for Knowledge Base ingestion.
@@ -185,16 +295,19 @@ def handle_kb_email():
 
         try:
             file.save(path)
+            initial_tags = _derive_tags(category, original_name, mail_subject)
+            base_metadata = {
+                "source": "email",
+                "category": category,
+                "originalName": original_name,
+                "subject": mail_subject,
+                "tags": initial_tags,
+            }
+            base_metadata["derived_tags_v1"] = _compute_derived_tags_for_metadata(category, safe_name, base_metadata)
             _kb_write_metadata(
                 category,
                 safe_name,
-                {
-                    "source": "email",
-                    "category": category,
-                    "originalName": original_name,
-                    "subject": mail_subject,
-                    "tags": _derive_tags(category, original_name, mail_subject),
-                },
+                base_metadata,
             )
             print(f"[kb] Saved KB doc: {path} (category={category})")
             _queue_document_processing(current_app._get_current_object(), path)
@@ -215,94 +328,50 @@ def handle_kb_email():
 @kb_bp.route("/kb", methods=["GET"])  # back-compat style
 @kb_bp.route("/api/kb", methods=["GET"])  # preferred API path
 def list_kb():
-    categories = []
     # Optional filter: ?q=tag or comma-separated tags
     q = (request.args.get("q") or request.args.get("tag") or "").strip().lower()
     q_tags = [t for t in {p.strip().lower() for p in q.split(",")} if t]
-
-    try:
-        cat_names = sorted(os.listdir(get_kb_dir()))
-    except OSError:
-        cat_names = []
-
-    for cat in cat_names:
-        if cat == 'processed':
-            continue
-
-        cat_dir = os.path.join(get_kb_dir(), cat)
-        if not os.path.isdir(cat_dir):
-            continue
-
-        items = []
-        try:
-            names = os.listdir(cat_dir)
-        except OSError:
-            names = []
-
-        for name in names:
-            if name.endswith('.meta.json'):
-                continue
-            full_path = os.path.join(cat_dir, name)
-            if not os.path.isfile(full_path):
-                continue
-
-            try:
-                modified_ts = os.path.getmtime(full_path)
-            except OSError:
-                modified_ts = 0
-
-            # Metadata and enrichment
-            meta_path = _kb_metadata_path(cat, name)
-            metadata = {}
-            try:
-                if os.path.exists(meta_path):
-                    with open(meta_path, "r", encoding="utf-8") as mh:
-                        md = json.load(mh)
-                        if isinstance(md, dict):
-                            metadata = md
-            except (OSError, json.JSONDecodeError):
-                metadata = {}
-
-            original_name = metadata.get("originalName") or extract_original_name(name)
-            subject = metadata.get("subject")
-            tags = metadata.get("tags")
-            if not isinstance(tags, list):
-                tags = _derive_tags(cat, original_name, subject)
-
-            # Optional filtering by tags
-            if q_tags and not any((t or "").lower() in q_tags for t in tags):
-                continue
-
-            mime, _ = mimetypes.guess_type(name)
-            size = None
-            try:
-                size = os.path.getsize(full_path)
-            except OSError:
-                pass
-
-            items.append({
-                "filename": name,
-                "originalName": original_name,
-                "url": _build_kb_url(cat, name),
-                "modifiedAt": datetime.fromtimestamp(modified_ts, tz=timezone.utc).isoformat() if modified_ts else None,
-                "mimeType": mime or "application/octet-stream",
-                "size": size,
-                "source": metadata.get("source") or "email",
-                "tags": tags,
-            })
-
-        # newest first within category
-        items.sort(key=lambda x: (x["modifiedAt"] or ""), reverse=True)
-
-        categories.append({
-            "category": cat,
-            "files": items,
-        })
-
-    # sort categories by name for stability
-    categories.sort(key=lambda x: x["category"]) 
-
+    categories = _list_kb_categories(q_tags=q_tags)
     return jsonify({"categories": categories})
+
+
+@kb_bp.post('/api/kb/match')
+def match_ticket_against_kb():
+    payload = request.get_json(silent=True) or {}
+    text = str(payload.get('text') or '').strip()
+    if not text:
+        return jsonify({'error': 'text is required.'}), 400
+
+    categories = _list_kb_categories()
+    kb_documents = []
+    for category in categories:
+        category_name = str(category.get('category') or '').strip()
+        for file_item in (category.get('files') or []):
+            if not isinstance(file_item, dict):
+                continue
+            kb_documents.append(
+                {
+                    'document_id': file_item.get('url') or file_item.get('filename') or '',
+                    'category': category_name,
+                    'filename': file_item.get('filename') or '',
+                    'url': file_item.get('url') or '',
+                    'tags': file_item.get('tags') if isinstance(file_item.get('tags'), list) else [],
+                    'derived_tags': file_item.get('derived_tags') if isinstance(file_item.get('derived_tags'), dict) else {},
+                }
+            )
+
+    enable_weighted_matching = bool(current_app.config.get('ENABLE_WEIGHTED_MATCHING', False))
+    matches = match_ticket_to_kb(
+        ticket_text=text,
+        kb_documents=kb_documents,
+        enable_weighted_matching=enable_weighted_matching,
+    )
+    return jsonify(
+        {
+            'matches': matches,
+            'weighted_matching_enabled': enable_weighted_matching,
+        }
+    )
 
 
 @kb_bp.route("/kb/<path:category>/<path:filename>", methods=["GET"])
@@ -398,25 +467,24 @@ def analyze_kb_document():
 
         session.commit()
         session.refresh(existing)
-        if ai_result:
-            try:
-                meta_tags = json.loads(existing.tags or "[]") if existing.tags else []
-            except json.JSONDecodeError:
-                meta_tags = []
-            _kb_write_analysis_metadata(
-                category,
-                filename,
-                {
-                    "status": "success",
-                    "analyzedAt": existing.updated_at.isoformat() if existing.updated_at else datetime.now(timezone.utc).isoformat(),
-                    "documentId": existing.id,
-                    "analyzer": "document_ai",
-                    "analysisMode": "document_processing",
-                    "promptSource": "backend/app/services/document_ai.py:PROMPT_TEMPLATE",
-                    "summary": existing.ai_summary or "",
-                    "tags": meta_tags if isinstance(meta_tags, list) else [],
-                },
-            )
+        try:
+            meta_tags = json.loads(existing.tags or "[]") if existing.tags else []
+        except json.JSONDecodeError:
+            meta_tags = []
+        _kb_write_analysis_metadata(
+            category,
+            filename,
+            {
+                "status": "success" if ai_result else "analysis_unavailable",
+                "analyzedAt": existing.updated_at.isoformat() if existing.updated_at else datetime.now(timezone.utc).isoformat(),
+                "documentId": existing.id,
+                "analyzer": "document_ai",
+                "analysisMode": "document_processing",
+                "promptSource": "backend/app/services/document_ai.py:PROMPT_TEMPLATE",
+                "summary": existing.ai_summary or "",
+                "tags": meta_tags if isinstance(meta_tags, list) else [],
+            },
+        )
         # Mirror documents.py serialization
         try:
             structured_doc = json.loads(existing.ai_structured or '{}') if existing.ai_structured else {}
@@ -426,6 +494,17 @@ def analyze_kb_document():
             tag_list = json.loads(existing.tags or '[]') if existing.tags else []
         except json.JSONDecodeError:
             tag_list = []
+        metadata = _kb_read_metadata(category, filename)
+        derived_tags = metadata.get("derived_tags_v1")
+        if not isinstance(derived_tags, dict):
+            derived_tags = _compute_derived_tags_for_metadata(
+                category,
+                filename,
+                {
+                    **metadata,
+                    "tags": tag_list if isinstance(tag_list, list) else [],
+                },
+            )
 
         return jsonify({
             'id': existing.id,
@@ -437,6 +516,7 @@ def analyze_kb_document():
             'ai_summary': existing.ai_summary or '',
             'ai_structured': structured_doc if isinstance(structured_doc, dict) else {},
             'tags': tag_list if isinstance(tag_list, list) else [],
+            'derived_tags': derived_tags,
             'created_at': existing.created_at.isoformat() if existing.created_at else None,
             'updated_at': existing.updated_at.isoformat() if existing.updated_at else None,
         })

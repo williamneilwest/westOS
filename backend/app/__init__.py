@@ -55,6 +55,7 @@ def create_app():
         LITELLM_MODEL=os.getenv('LITELLM_MODEL', 'ollama/llama3.2'),
         AVAILABLE_AI_MODELS=os.getenv('AVAILABLE_AI_MODELS', 'llama3.2,mistral,qwen2.5-coder'),
         OPENAI_API_KEY=os.getenv('OPENAI_API_KEY', ''),
+        ENABLE_WEIGHTED_MATCHING=os.getenv('ENABLE_WEIGHTED_MATCHING', 'false').lower() == 'true',
         PREVIEW_MAX_ROWS=int(os.getenv('PREVIEW_MAX_ROWS', '10')),
         FOCUSED_MAX_ROWS=int(os.getenv('FOCUSED_MAX_ROWS', '5')),
         ENABLE_CHUNKING=os.getenv('ENABLE_CHUNKING', 'true').lower() == 'true',
