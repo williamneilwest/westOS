@@ -696,13 +696,14 @@ export function WorkPage() {
 
       try {
         const payload = await getLatestTickets();
+        const latestTicketsPayload = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
         if (!isMounted) {
           return;
         }
 
-        const columns = Array.isArray(payload?.columns) ? payload.columns : [];
-        const rows = Array.isArray(payload?.tickets) ? payload.tickets : [];
-        const fileName = String(payload?.fileName || ACTIVE_TICKETS_FIXED_FILE).trim() || ACTIVE_TICKETS_FIXED_FILE;
+        const columns = Array.isArray(latestTicketsPayload?.columns) ? latestTicketsPayload.columns : [];
+        const rows = Array.isArray(latestTicketsPayload?.tickets) ? latestTicketsPayload.tickets : [];
+        const fileName = String(latestTicketsPayload?.fileName || ACTIVE_TICKETS_FIXED_FILE).trim() || ACTIVE_TICKETS_FIXED_FILE;
         const nextDataset = {
           fileName,
           columns,
@@ -712,7 +713,7 @@ export function WorkPage() {
         setAnalysis(buildLocalAnalysis(fileName, nextDataset));
         setLatestDataset({ columns, rows });
         setLatestFileName(fileName);
-        setLatestMessage(String(payload?.message || '').trim());
+        setLatestMessage(String(latestTicketsPayload?.message || '').trim());
         setCachedWorkDataset(nextDataset);
       } catch (requestError) {
         if (!isMounted) {

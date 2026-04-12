@@ -107,7 +107,7 @@ export function DocumentPage() {
     }
   }
 
-  async function runAnalysis(rerun = false) {
+  async function runAnalysis(rerun = true) {
     setAnalysisError('');
     setAnalysisText('');
     setTokenUsage(null);
@@ -237,53 +237,6 @@ export function DocumentPage() {
     <section className="module">
       <Card className="analysis-grid__wide">
         <CardHeader
-          eyebrow={title}
-          title={displayName}
-          description={mimeType || 'Stored file'}
-          action={
-            <div className="table-actions">
-              <button
-                type="button"
-                className="compact-toggle"
-                disabled={analyzing}
-                onClick={() => {
-                  void runAnalysis(false);
-                }}
-              >
-                <Brain size={15} />
-                {analyzing ? 'Analyzing...' : 'Analyze with AI'}
-              </button>
-              <a className="compact-toggle" href={previewUrl} rel="noreferrer" target="_blank">
-                <ExternalLink size={15} />
-                Open Raw
-              </a>
-              <a className="compact-toggle" download={currentFileName} href={previewUrl}>
-                <Download size={15} />
-                Download
-              </a>
-              <Link className="compact-toggle" to={backTo}>
-                <ArrowLeft size={15} />
-                Back
-              </Link>
-            </div>
-          }
-        />
-
-        {inlinePreview ? (
-          <div className="document-view">
-            {renderPreview(previewUrl, currentFileName, mimeType)}
-          </div>
-        ) : (
-          <EmptyState
-            icon={<FileText size={20} />}
-            title="Preview not available in-browser"
-            description="This document type is supported for download and raw open, but the browser may not render it inline."
-          />
-        )}
-      </Card>
-
-      <Card className="analysis-grid__wide">
-        <CardHeader
           eyebrow="Document Workspace"
           title="Metadata + AI"
           description="Manage document metadata and review AI output."
@@ -403,6 +356,53 @@ export function DocumentPage() {
             </button>
           </div>
         ) : null}
+      </Card>
+
+      <Card className="analysis-grid__wide">
+        <CardHeader
+          eyebrow={title}
+          title={displayName}
+          description={mimeType || 'Stored file'}
+          action={
+            <div className="table-actions">
+              <button
+                type="button"
+                className="compact-toggle"
+                disabled={analyzing}
+                onClick={() => {
+                  void runAnalysis(true);
+                }}
+              >
+                <Brain size={15} />
+                {analyzing ? 'Analyzing...' : 'Analyze with AI'}
+              </button>
+              <a className="compact-toggle" href={previewUrl} rel="noreferrer" target="_blank">
+                <ExternalLink size={15} />
+                Open Raw
+              </a>
+              <a className="compact-toggle" download={currentFileName} href={previewUrl}>
+                <Download size={15} />
+                Download
+              </a>
+              <Link className="compact-toggle" to={backTo}>
+                <ArrowLeft size={15} />
+                Back
+              </Link>
+            </div>
+          }
+        />
+
+        {inlinePreview ? (
+          <div className="document-view">
+            {renderPreview(previewUrl, currentFileName, mimeType)}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<FileText size={20} />}
+            title="Preview not available in-browser"
+            description="This document type is supported for download and raw open, but the browser may not render it inline."
+          />
+        )}
       </Card>
     </section>
   );

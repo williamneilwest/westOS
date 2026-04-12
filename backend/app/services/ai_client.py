@@ -24,6 +24,14 @@ ACK_PATTERNS = [
 LOGGER = logging.getLogger(__name__)
 
 
+def _preserve_prompt(payload):
+    if not isinstance(payload, dict):
+        return False
+    if bool(payload.get('preserve_prompt')):
+        return True
+    return str(payload.get('analysis_mode') or '').strip().lower() == 'document_processing'
+
+
 def extract_message_content(message):
     content = message.get('content', '')
 
@@ -102,14 +110,14 @@ def clean_message_content(content):
     return content
 
 
-def normalize_messages(payload):
+def normalize_messages(payload, preserve_prompt=False):
     if isinstance(payload.get('messages'), list) and payload['messages']:
         cleaned_messages = []
         for message in payload['messages']:
             if not isinstance(message, dict):
                 continue
 
-            cleaned_content = clean_message_content(message.get('content', ''))
+            cleaned_content = message.get('content', '') if preserve_prompt else clean_message_content(message.get('content', ''))
             if not extract_message_content({'content': cleaned_content}).strip():
                 continue
 
@@ -120,7 +128,7 @@ def normalize_messages(payload):
 
         return cleaned_messages
 
-    prompt = clean_ticket_text(payload.get('message', ''))
+    prompt = str(payload.get('message', '') or '').strip() if preserve_prompt else clean_ticket_text(payload.get('message', ''))
     if not prompt:
         raise ValueError('A prompt is required.')
 
@@ -128,7 +136,7 @@ def normalize_messages(payload):
 
 
 def build_prompt(payload):
-    messages = normalize_messages(payload)
+    messages = normalize_messages(payload, preserve_prompt=_preserve_prompt(payload))
 
     if len(messages) == 1:
         return extract_message_content(messages[0]).strip()
@@ -156,13 +164,15 @@ def sanitize_payload(payload):
         return {}
 
     sanitized = dict(payload)
+    preserve_prompt = _preserve_prompt(payload)
+    sanitized.pop('preserve_prompt', None)
 
     if isinstance(payload.get('messages'), list):
-        sanitized['messages'] = normalize_messages(payload)
+        sanitized['messages'] = normalize_messages(payload, preserve_prompt=preserve_prompt)
         return sanitized
 
     if 'message' in payload:
-        sanitized['message'] = clean_ticket_text(payload.get('message', ''))
+        sanitized['message'] = str(payload.get('message', '') or '').strip() if preserve_prompt else clean_ticket_text(payload.get('message', ''))
 
     return sanitized
 

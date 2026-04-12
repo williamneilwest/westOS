@@ -16,6 +16,7 @@ from ..services.ai_client import (
     call_gateway_chat,
     call_gateway_openai_chat,
 )
+from ..services.document_ai import analyze_document
 from ..services.document_parser import parse_document
 from ..services.smart_analysis import (
     build_execution_plan,
@@ -30,34 +31,11 @@ from ..services.smart_analysis import (
 
 
 ai_bp = Blueprint('ai', __name__)
-DOCUMENT_ANALYSIS_PROMPT = """[PASTE THE FULL DOCUMENT PARSER PROMPT HERE EXACTLY]"""
 
 
 def _ai_analysis_enabled():
     value = str(os.getenv('AI_ANALYSIS_ENABLED', 'true')).strip().lower()
     return value in {'1', 'true', 'yes', 'on'}
-
-
-def _env_model():
-    return str(os.getenv('OPENAI_MODEL', '')).strip()
-
-
-def _env_temperature():
-    try:
-        return float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
-    except ValueError:
-        return 0.2
-
-
-def calculate_max_tokens(document_text: str) -> int:
-    base = 2000
-    per_char = int(len(document_text) / 2)
-    calculated = base + per_char
-
-    hard_cap = int(os.getenv('OPENAI_HARD_TOKEN_CAP', 20000))
-    soft_cap = int(os.getenv('OPENAI_MAX_OUTPUT_TOKENS', 12000))
-
-    return max(1000, min(calculated, soft_cap, hard_cap))
 
 
 def _default_ai_settings():
@@ -328,7 +306,7 @@ def analyze_document_endpoint():
     document_text = str(payload.get('documentText') or '').strip()
     document_name = str(payload.get('documentName') or '').strip() or 'Untitled Document'
     document_url = str(payload.get('documentUrl') or '').strip()
-    rerun = bool(payload.get('rerun'))
+    rerun = bool(payload.get('rerun', True))
     resolved_path = _extract_document_path(document_url)
 
     if not document_text and resolved_path and os.path.isfile(resolved_path):
@@ -356,6 +334,9 @@ def analyze_document_endpoint():
                             'analyzedAt': existing.created_at.isoformat() if existing.created_at else datetime.now(timezone.utc).isoformat(),
                             'analysisId': existing.id,
                             'documentName': existing.document_name,
+                            'analyzer': 'document_ai',
+                            'analysisMode': 'document_processing',
+                            'promptSource': 'backend/app/services/document_ai.py:PROMPT_TEMPLATE',
                             'full_analysis': existing.full_analysis,
                             'quick_summary': existing.quick_summary,
                             'raw': existing.full_analysis,
@@ -382,44 +363,18 @@ def analyze_document_endpoint():
                     }
                 )
 
-        model_prompt = '\n\n'.join(
-            [
-                DOCUMENT_ANALYSIS_PROMPT,
-                f'Document Name: {document_name}',
-                'Document Content:',
-                document_text,
-            ]
-        )
-
-        max_tokens = calculate_max_tokens(document_text)
-        request_payload = {
-            'message': model_prompt,
-            'analysis_mode': 'focused',
-            'model': _env_model(),
-            'max_tokens': max_tokens,
-            'temperature': _env_temperature(),
-        }
-        if max_tokens > 18000:
-            current_app.logger.warning('High token request for document: %s', document_name)
-        gateway_result = call_gateway_chat(
-            request_payload,
-            current_app.config['AI_GATEWAY_BASE_URL'],
-            timeout_seconds=20,
-        )
-        usage = gateway_result.get('usage', {}) if isinstance(gateway_result, dict) else {}
-        usage = usage if isinstance(usage, dict) else {}
-        input_tokens = int(usage.get('prompt_tokens') or usage.get('input_tokens') or 0)
-        output_tokens = int(usage.get('completion_tokens') or usage.get('output_tokens') or 0)
-        compat_result = build_compat_chat_response(request_payload, gateway_result)
-        raw_response = str(compat_result.get('message') or '').strip()
+        ai_result = analyze_document(document_text, document_name)
+        raw_response = str(ai_result.get('raw_response') or '').strip()
         if not raw_response:
             raw_response = 'AI returned an empty response.'
         if len(raw_response) < 1000:
             current_app.logger.warning('Possible truncated AI response for %s (length=%s)', document_name, len(raw_response))
 
+        input_tokens = int(ai_result.get('input_tokens') or 0)
+        output_tokens = int(ai_result.get('output_tokens') or 0)
         parsed_sections = _extract_full_quick_sections(raw_response)
         full_analysis = raw_response
-        quick_summary = parsed_sections.get('quick') or raw_response
+        quick_summary = str(ai_result.get('summary') or '').strip() or parsed_sections.get('quick') or raw_response
 
         record = AIAnalysis(
             document_name=document_name,
@@ -442,6 +397,9 @@ def analyze_document_endpoint():
                     'analyzedAt': record.created_at.isoformat() if record.created_at else datetime.now(timezone.utc).isoformat(),
                     'analysisId': record.id,
                     'documentName': record.document_name,
+                    'analyzer': 'document_ai',
+                    'analysisMode': 'document_processing',
+                    'promptSource': 'backend/app/services/document_ai.py:PROMPT_TEMPLATE',
                     'full_analysis': record.full_analysis,
                     'quick_summary': record.quick_summary,
                     'raw': record.full_analysis,
@@ -468,6 +426,8 @@ def analyze_document_endpoint():
                 },
             }
         )
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
     except RequestException as error:
         return jsonify({'error': f'AI request failed: {error}'}), 503
     finally:

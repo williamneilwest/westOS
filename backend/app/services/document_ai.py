@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -10,29 +11,40 @@ from .settings_store import get_ai_model
 
 
 LOGGER = logging.getLogger(__name__)
-PROMPT_TEMPLATE = """Convert the following document into STRICT JSON with this exact shape:
+PROMPT_TEMPLATE = """You are analyzing an operational support/IT document.
 
-{{
-  "summary": "...short summary...",
-  "type": "ticket | kb | instruction | report | unknown",
-  "tags": ["vpn", "access", "responder"],
-  "entities": {{
-    "systems": [],
-    "users": [],
-    "groups": [],
-    "keywords": []
-  }},
-  "actionable_insights": [
-    "...what should be done...",
-    "...possible resolution..."
-  ]
-}}
+Return a comprehensive plain-text analysis with these sections in order:
 
-Rules:
-- NO markdown
-- NO explanation
-- JSON ONLY
-- tags must be lowercase reusable keywords
+Quick Summary:
+- 5-8 bullets with concrete facts from the document.
+
+Full Analysis:
+1) Purpose and scope
+- Explain what this document is for and who should use it.
+
+2) Critical details extracted
+- Include systems, users, groups, permissions, dependencies, constraints, deadlines, and environments.
+- Include exact identifiers when present (ticket IDs, hostnames, URLs, group names, commands, file paths).
+
+3) Procedure breakdown
+- Reconstruct the step-by-step process from the document.
+- Flag missing prerequisites or ambiguous steps.
+
+4) Risks and failure points
+- List likely errors, hidden assumptions, and operational risks.
+- Include severity (high/medium/low) per risk.
+
+5) Validation checklist
+- Provide explicit checks to confirm successful execution.
+
+6) Recommended follow-ups
+- Provide concrete next actions and suggested improvements.
+
+Requirements:
+- Be specific and evidence-based from the provided content.
+- Prefer complete coverage over brevity.
+- Do not output JSON.
+- Do not use markdown code fences.
 
 Filename: {filename}
 
@@ -112,35 +124,53 @@ def extract_json(text):
     return None
 
 
+def _calculate_max_tokens(document_text):
+    base = 2500
+    per_char = int(len(document_text) / 3)
+    calculated = base + per_char
+    hard_cap = int(os.getenv('OPENAI_HARD_TOKEN_CAP', '20000'))
+    soft_cap = int(os.getenv('OPENAI_MAX_OUTPUT_TOKENS', '16000'))
+    return max(2000, min(calculated, soft_cap, hard_cap))
+
+
 def analyze_document(text, filename):
+    text = str(text or '').strip()
+    input_char_limit = int(os.getenv('DOCUMENT_AI_INPUT_CHAR_LIMIT', '60000'))
+    truncated_text = text[:input_char_limit]
+
     prompt = PROMPT_TEMPLATE.format(
         filename=Path(filename or '').name,
-        text=(text or '')[:12000],
+        text=truncated_text,
     )
 
     document_model = get_ai_model(mode='document_processing')
+    max_tokens = _calculate_max_tokens(truncated_text)
 
     request_payload = {
         'message': prompt,
-        'analysis_mode': 'focused',
+        'analysis_mode': 'document_processing',
         'model': document_model,
+        'max_tokens': max_tokens,
+        'preserve_prompt': True,
     }
     gateway_result = call_gateway_chat(
         request_payload,
         current_app.config['AI_GATEWAY_BASE_URL'],
-        timeout_seconds=25,
+        timeout_seconds=60,
     )
     payload = build_compat_chat_response(request_payload, gateway_result)
     raw_message = str(payload.get('message') or '').strip()
     if not raw_message:
         raise ValueError('AI analysis returned an empty response.')
+    usage = gateway_result.get('usage', {}) if isinstance(gateway_result, dict) else {}
+    usage = usage if isinstance(usage, dict) else {}
+    input_tokens = int(usage.get('prompt_tokens') or usage.get('input_tokens') or 0)
+    output_tokens = int(usage.get('completion_tokens') or usage.get('output_tokens') or 0)
 
-    # Temporary raw passthrough mode for debugging:
-    # keep the full model body and skip JSON extraction/normalization.
     preview = re.sub(r'\s+', ' ', raw_message)[:500]
     LOGGER.info('AI raw response preview for %s: %s', filename, preview)
-    first_line = raw_message.splitlines()[0].strip() if raw_message else ''
-    summary = first_line[:200] if first_line else 'Raw AI response captured.'
+    first_non_empty_line = next((line.strip() for line in raw_message.splitlines() if line.strip()), '')
+    summary = first_non_empty_line[:240] if first_non_empty_line else 'AI analysis completed.'
 
     return {
         'summary': summary,
@@ -154,4 +184,6 @@ def analyze_document(text, filename):
         },
         'actionable_insights': [],
         'raw_response': raw_message,
+        'input_tokens': input_tokens,
+        'output_tokens': output_tokens,
     }
