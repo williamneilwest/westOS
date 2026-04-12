@@ -2,6 +2,7 @@ import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { LandingPage } from '../features/landing/LandingPage';
 import { ReadmePage } from '../features/readme/ReadmePage';
 import { AISettingsPage } from '../features/settings/AISettingsPage';
+import { DocumentsPage } from '../features/ai/DocumentsPage';
 import { TablePage } from '../features/tables/TablePage';
 import { DocumentPage } from '../features/uploads/DocumentPage';
 import { ProcessedKBPage } from '../features/kb/ProcessedKBPage';
@@ -69,6 +70,10 @@ export const router = createBrowserRouter([
       {
         path: 'ai',
         Component: AISettingsPage
+      },
+      {
+        path: 'ai/documents',
+        Component: DocumentsPage
       },
       {
         path: 'admin',
@@ -199,6 +204,10 @@ export const router = createBrowserRouter([
   {
     path: '/ai',
     element: <Navigate replace to="/app/ai" />
+  },
+  {
+    path: '/ai/documents',
+    element: <Navigate replace to="/app/ai/documents" />
   },
   {
     path: '/admin',

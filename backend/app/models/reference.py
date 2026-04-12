@@ -1,5 +1,6 @@
 import os
-from sqlalchemy import String, Column, create_engine, inspect, text, Text
+from datetime import datetime, timezone
+from sqlalchemy import String, Column, DateTime, Integer, create_engine, inspect, text, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
@@ -38,6 +39,22 @@ class Endpoint(Base):
     rule = Column(String, nullable=False)  # URL pattern, e.g. '/api/ai/chat'
     methods = Column(String, nullable=False)  # comma-separated methods, e.g. 'GET,POST'
     description = Column(Text)  # taken from view function docstring when available
+
+
+class AIDocument(Base):
+    __tablename__ = 'ai_documents'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    filename = Column(String, nullable=False)
+    original_path = Column(String, nullable=False)
+    file_type = Column(String)
+    source = Column(String)
+    parsed_text = Column(Text)
+    ai_summary = Column(Text)
+    ai_structured = Column(Text)
+    tags = Column(Text)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 def init_db():

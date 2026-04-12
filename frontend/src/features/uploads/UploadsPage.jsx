@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, Eye, FileSpreadsheet } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getUploads } from '../../app/services/api';
+import { analyzeDocument, getUploads } from '../../app/services/api';
 import { buildDocumentViewHref, isCsvFile } from '../../app/utils/documentFiles';
 import { formatDataFileName } from '../../app/utils/fileDisplay';
 import { Card, CardHeader } from '../../app/ui/Card';
@@ -33,6 +33,7 @@ function formatUploadSource(value) {
 export function UploadsPage() {
   const [files, setFiles] = useState([]);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -64,6 +65,7 @@ export function UploadsPage() {
         />
 
         {error ? <p className="status-text status-text--error">{error}</p> : null}
+        {message ? <p className="status-text">{message}</p> : null}
 
         {files.length ? (
           <div className="stack-list">
@@ -101,6 +103,23 @@ export function UploadsPage() {
                   <a className="compact-toggle" download={file.filename} href={file.url}>
                     Download
                   </a>
+                  <button
+                    type="button"
+                    className="compact-toggle"
+                    onClick={async () => {
+                      setError('');
+                      setMessage('');
+
+                      try {
+                        await analyzeDocument(file.path);
+                        setMessage(`${formatDataFileName(file.filename)} analyzed.`);
+                      } catch (requestError) {
+                        setError(requestError.message || 'Document analysis failed.');
+                      }
+                    }}
+                  >
+                    Analyze
+                  </button>
                 </div>
                 <details className="upload-row-menu">
                   <summary className="compact-toggle upload-row-menu__toggle">
@@ -118,6 +137,23 @@ export function UploadsPage() {
                     <a className="upload-row-menu__action" download={file.filename} href={file.url}>
                       Download
                     </a>
+                    <button
+                      type="button"
+                      className="upload-row-menu__action"
+                      onClick={async () => {
+                        setError('');
+                        setMessage('');
+
+                        try {
+                          await analyzeDocument(file.path);
+                          setMessage(`${formatDataFileName(file.filename)} analyzed.`);
+                        } catch (requestError) {
+                          setError(requestError.message || 'Document analysis failed.');
+                        }
+                      }}
+                    >
+                      Analyze
+                    </button>
                   </div>
                 </details>
               </div>

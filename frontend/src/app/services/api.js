@@ -81,6 +81,24 @@ export function getKnowledgeBase() {
   return request(backendBaseUrl, '/api/kb');
 }
 
+export function analyzeDocument(filePath) {
+  return request(backendBaseUrl, '/api/documents/analyze', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ filePath })
+  });
+}
+
+export function getAnalyzedDocuments() {
+  return request(backendBaseUrl, '/api/documents');
+}
+
+export function getAnalyzedDocument(documentId) {
+  return request(backendBaseUrl, `/api/documents/${encodeURIComponent(documentId)}`);
+}
+
 export function getProcessedKnowledgeBase() {
   return request(backendBaseUrl, '/api/kb/processed');
 }

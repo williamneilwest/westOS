@@ -4,185 +4,159 @@ import logging
 import mimetypes
 from pathlib import Path
 
-from flask import current_app
-
-try:
-    import fitz
-except ImportError:  # pragma: no cover - dependency optional at runtime
-    fitz = None
-
 try:
     import pytesseract
-except ImportError:  # pragma: no cover - dependency optional at runtime
+except ImportError:  # pragma: no cover
     pytesseract = None
 
 try:
     from PIL import Image
-except ImportError:  # pragma: no cover - dependency optional at runtime
+except ImportError:  # pragma: no cover
     Image = None
 
 
 LOGGER = logging.getLogger(__name__)
-MIN_EXTRACTED_TEXT_CHARS = 500
-PROMPT_TEMPLATE = """Convert the following IT document into structured JSON with fields:
-
-* title
-* category
-* keywords (array)
-* steps (array)
-* rules (array)
-* systems (array)
-* summary (short paragraph)
-
-Return ONLY valid JSON.
-
-Document text:
-{text}
-"""
+MIN_TEXT_LENGTH_FOR_PDF = 500
 
 
-def _storage_root():
-    return Path(current_app.config.get('BACKEND_DATA_DIR', '/app/data'))
+try:
+    from pdf2image import convert_from_path
+except ImportError:  # pragma: no cover
+    convert_from_path = None
+
+try:
+    from pypdf import PdfReader
+except ImportError:  # pragma: no cover
+    PdfReader = None
 
 
-def _processed_dir():
-    path = _storage_root() / 'kb' / 'processed'
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _ensure_parser_dependencies():
-    missing = []
-    if fitz is None:
-        missing.append('PyMuPDF')
-    if pytesseract is None:
-        missing.append('pytesseract')
-    if Image is None:
-        missing.append('Pillow')
-
-    if missing:
-        raise RuntimeError(f'Missing document parsing dependencies: {", ".join(missing)}')
-
-
-def _processed_output_path(file_path):
-    source = Path(file_path)
-    return _processed_dir() / f'{source.stem}.json'
-
-
-def _extract_pdf_text(file_path):
-    text_parts = []
-
-    with fitz.open(file_path) as document:
-        for page in document:
-            page_text = page.get_text('text') or ''
-            if page_text.strip():
-                text_parts.append(page_text.strip())
-
-        combined = '\n\n'.join(text_parts).strip()
-        if len(combined) >= MIN_EXTRACTED_TEXT_CHARS:
-            return combined
-
-        ocr_parts = []
-        for page in document:
-            pixmap = page.get_pixmap()
-            image = Image.open(io.BytesIO(pixmap.tobytes('png')))
-            ocr_text = pytesseract.image_to_string(image) or ''
-            if ocr_text.strip():
-                ocr_parts.append(ocr_text.strip())
-
-        fallback = '\n\n'.join(ocr_parts).strip()
-        return fallback or combined
-
-
-def _extract_image_text(file_path):
-    with Image.open(file_path) as image:
-        return (pytesseract.image_to_string(image) or '').strip()
-
-
-def extract_document_text(file_path):
-    path = Path(file_path)
-    mime_type, _ = mimetypes.guess_type(path.name)
-    suffix = path.suffix.lower()
-
-    if suffix == '.pdf' or mime_type == 'application/pdf':
-        return _extract_pdf_text(path)
-
-    if (mime_type or '').startswith('image/') or suffix in {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff'}:
-        return _extract_image_text(path)
+def _ocr_image(image):
+    if pytesseract is None or Image is None:
+        return ''
 
     try:
-        return path.read_text(encoding='utf-8', errors='replace').strip()
-    except OSError:
+        return (pytesseract.image_to_string(image) or '').strip()
+    except Exception:
         return ''
 
 
-def parse_document_with_ai(text):
-    prompt = PROMPT_TEMPLATE.format(text=(text or '')[:12000])
+def _parse_pdf(path: Path) -> str:
+    text_parts = []
 
-    with current_app.test_client() as client:
-        response = client.post('/api/ai/chat', json={'message': prompt})
+    if PdfReader is not None:
+        try:
+            reader = PdfReader(str(path))
+            for page in reader.pages:
+                page_text = page.extract_text() or ''
+                if page_text.strip():
+                    text_parts.append(page_text.strip())
+        except Exception as error:
+            LOGGER.warning('PDF text extraction failed for %s: %s', path, error)
 
-    if response.status_code >= 400:
-        raise ValueError(f'AI parsing failed with status {response.status_code}')
+    combined = '\n\n'.join(text_parts).strip()
+    if len(combined) >= MIN_TEXT_LENGTH_FOR_PDF:
+        return combined
 
-    payload = response.get_json(silent=True) or {}
-    message = payload.get('message', '')
-    if not isinstance(message, str) or not message.strip():
-        raise ValueError('AI parsing returned an empty response.')
+    if convert_from_path is None:
+        return combined
 
-    return message.strip()
-
-
-def _normalize_parsed_payload(file_path, text, ai_response):
     try:
-        parsed = json.loads(ai_response)
-    except json.JSONDecodeError:
-        return {
-            'filename': Path(file_path).name,
-            'parseError': 'AI returned invalid JSON.',
-            'rawResponse': ai_response,
-            'extractedTextLength': len(text or ''),
-        }
+        images = convert_from_path(str(path))
+    except Exception as error:
+        LOGGER.warning('PDF OCR conversion failed for %s: %s', path, error)
+        return combined
 
-    if not isinstance(parsed, dict):
-        return {
-            'filename': Path(file_path).name,
-            'parseError': 'AI returned non-object JSON.',
-            'rawResponse': ai_response,
-            'extractedTextLength': len(text or ''),
-        }
+    ocr_parts = []
+    for image in images:
+        ocr_text = _ocr_image(image)
+        if ocr_text:
+            ocr_parts.append(ocr_text)
 
-    parsed['filename'] = Path(file_path).name
-    parsed['extractedTextLength'] = len(text or '')
-    return parsed
+    fallback = '\n\n'.join(ocr_parts).strip()
+    return fallback or combined
 
 
-def process_document(file_path):
-    _ensure_parser_dependencies()
+def _parse_image(path: Path) -> str:
+    if Image is None:
+        return ''
+
+    try:
+        with Image.open(path) as image:
+            return _ocr_image(image)
+    except Exception as error:
+        LOGGER.warning('Image OCR failed for %s: %s', path, error)
+        return ''
+
+
+def _parse_text_file(path: Path) -> str:
+    try:
+        return path.read_text(encoding='utf-8', errors='replace').strip()
+    except OSError as error:
+        LOGGER.warning('Text extraction failed for %s: %s', path, error)
+        return ''
+
+
+def parse_document(file_path):
     path = Path(file_path)
-    output_path = _processed_output_path(path)
+    suffix = path.suffix.lower()
+    mime_type, _ = mimetypes.guess_type(path.name)
 
-    if output_path.exists():
-        return output_path
+    if suffix == '.pdf' or mime_type == 'application/pdf':
+        text = _parse_pdf(path)
+    elif (mime_type or '').startswith('image/') or suffix in {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff'}:
+        text = _parse_image(path)
+    elif suffix in {'.csv', '.txt', '.log', '.md'} or (mime_type or '').startswith('text/'):
+        text = _parse_text_file(path)
+    else:
+        text = _parse_text_file(path)
 
-    text = extract_document_text(path)
-    if not text.strip():
-        raise ValueError('No document text could be extracted.')
-
-    ai_response = parse_document_with_ai(text)
-    payload = _normalize_parsed_payload(path, text, ai_response)
-    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
-    return output_path
+    return {
+        'text': text or '',
+    }
 
 
 def run_document_processing_task(app, file_path):
     with app.app_context():
-        output_path = _processed_output_path(file_path)
-        if output_path.exists():
-            return
-
         try:
-            process_document(file_path)
-            LOGGER.info('Processed KB document saved to %s', output_path)
+            from ..models.reference import AIDocument, SessionLocal, init_db
+            from .document_ai import analyze_document
+
+            init_db()
+            extracted = parse_document(file_path)
+            text = str((extracted or {}).get('text') or '')
+            filename = Path(file_path).name
+            mime_type, _ = mimetypes.guess_type(filename)
+
+            ai_result = None
+            try:
+                ai_result = analyze_document(text, filename)
+            except Exception as error:
+                LOGGER.warning('Background AI analysis failed for %s: %s', file_path, error)
+
+            tags = ai_result.get('tags') if isinstance(ai_result, dict) and isinstance(ai_result.get('tags'), list) else []
+            summary = str(ai_result.get('summary') or '').strip() if isinstance(ai_result, dict) else ''
+            structured = {key: value for key, value in (ai_result or {}).items() if key != 'tags'} if isinstance(ai_result, dict) else {}
+
+            session = SessionLocal()
+            try:
+                existing = session.query(AIDocument).filter(AIDocument.original_path == str(file_path)).one_or_none()
+                if existing is None:
+                    existing = AIDocument(
+                        filename=filename,
+                        original_path=str(file_path),
+                    )
+                    session.add(existing)
+
+                existing.filename = filename
+                existing.original_path = str(file_path)
+                existing.file_type = mime_type or Path(filename).suffix.lower().lstrip('.')
+                existing.source = 'kb'
+                existing.parsed_text = text
+                existing.ai_summary = summary
+                existing.ai_structured = json.dumps(structured, ensure_ascii=False)
+                existing.tags = json.dumps(sorted({str(tag or '').strip().lower() for tag in tags if str(tag or '').strip()}), ensure_ascii=False)
+                session.commit()
+            finally:
+                session.close()
         except Exception as error:
-            LOGGER.exception('Failed to process KB document %s: %s', file_path, error)
+            LOGGER.exception('Background document processing failed for %s: %s', file_path, error)

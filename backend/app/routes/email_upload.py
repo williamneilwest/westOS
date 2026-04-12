@@ -434,6 +434,7 @@ def list_uploads():
             "filename": name,
             "originalName": original,
             "url": _build_file_url(name),
+            "path": full_path,
             "modifiedAt": datetime.fromtimestamp(modified_ts, tz=timezone.utc).isoformat() if modified_ts else None,
             "source": source,
             "mimeType": mime_type or 'application/octet-stream',

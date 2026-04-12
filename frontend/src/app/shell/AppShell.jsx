@@ -65,6 +65,10 @@ function getContextTitle(pathname) {
     return 'Knowledge Base';
   }
 
+  if (pathname.startsWith('/app/ai/documents')) {
+    return 'AI / Documents';
+  }
+
   if (pathname.startsWith('/app/work')) {
     return 'Work';
   }
@@ -123,6 +127,10 @@ function getBackTarget(pathname) {
 
   if (pathname.startsWith('/app/kb')) {
     return '/app/work';
+  }
+
+  if (pathname.startsWith('/app/ai/documents')) {
+    return '/app/ai';
   }
 
   if (pathname.startsWith('/app/')) {
@@ -260,6 +268,14 @@ export function AppShell() {
             <ArrowLeft size={14} />
           </NavLink>
           <h2 className="shell__context-title">{contextTitle}</h2>
+          {location.pathname.startsWith('/app/ai') ? (
+            <NavLink
+              to={location.pathname.startsWith('/app/ai/documents') ? '/app/ai' : '/app/ai/documents'}
+              className={({ isActive }) => (isActive ? 'compact-toggle compact-toggle--active' : 'compact-toggle')}
+            >
+              {location.pathname.startsWith('/app/ai/documents') ? 'AI Settings' : 'AI Documents'}
+            </NavLink>
+          ) : null}
           {location.pathname.startsWith('/app/kb') ? (
             <NavLink
               to={location.pathname.startsWith('/app/kb/processed') ? '/app/kb' : '/app/kb/processed'}
