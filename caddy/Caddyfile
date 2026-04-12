@@ -4,6 +4,15 @@ westos.dev {
         reverse_proxy backend:5000
     }
 
+    handle /uploads* {
+        reverse_proxy backend:5000
+    }
+
+    # Knowledge Base endpoints (list + downloads)
+    handle /kb* {
+        reverse_proxy backend:5000
+    }
+
     handle {
         reverse_proxy 10.0.0.10:5173
     }

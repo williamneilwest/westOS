@@ -4,24 +4,16 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="99365218-23de-46b4-b0b7-80829c01ff35" name="Changes" comment="edited ai card">
-      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.env.example" beforeDir="false" afterPath="$PROJECT_DIR$/.env.example" afterDir="false" />
+    <list default="true" id="99365218-23de-46b4-b0b7-80829c01ff35" name="Changes" comment="enabled hot reload for backend and frontend during development">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ai-gateway/app/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/ai-gateway/app/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ai-gateway/app/services/chat.py" beforeDir="false" afterPath="$PROJECT_DIR$/ai-gateway/app/services/chat.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/routes/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/routes/__init__.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/app/routes/email_upload.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/routes/email_upload.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app/routes/health.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/routes/health.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app/routes/reference.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/routes/reference.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app/routes/work.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/routes/work.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/caddy/Caddyfile" beforeDir="false" afterPath="$PROJECT_DIR$/caddy/Caddyfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/router.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/router.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/services/api.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/services/api.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/features/reference/ReferencePage.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/features/reference/ReferencePage.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/features/uploads/UploadsPage.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/features/uploads/UploadsPage.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/features/work/GetUserGroupsPage.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/features/work/GetUserGroupsPage.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/shell/modules.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/shell/modules.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/utils/fileDisplay.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/utils/fileDisplay.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/features/work/WorkPage.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/features/work/WorkPage.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/features/work/pages/TicketDetail.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/features/work/pages/TicketDetail.jsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -136,7 +128,7 @@
       <workItem from="1775898448247" duration="4427000" />
       <workItem from="1775904429915" duration="4649000" />
       <workItem from="1775922324445" duration="1829000" />
-      <workItem from="1775956647569" duration="2954000" />
+      <workItem from="1775956647569" duration="6717000" />
     </task>
     <task id="LOCAL-00001" summary="Refactor AI analysis logic and enhance ticket detail UI handling">
       <option name="closed" value="true" />
@@ -154,7 +146,15 @@
       <option name="project" value="LOCAL" />
       <updated>1775904925741</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="enabled hot reload for backend and frontend during development">
+      <option name="closed" value="true" />
+      <created>1775959671600</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1775959671600</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -164,7 +164,8 @@
     <MESSAGE value="edited filtering" />
     <MESSAGE value="Refactor AI analysis logic and enhance ticket detail UI handling" />
     <MESSAGE value="edited ai card" />
-    <option name="LAST_COMMIT_MESSAGE" value="edited ai card" />
+    <MESSAGE value="enabled hot reload for backend and frontend during development" />
+    <option name="LAST_COMMIT_MESSAGE" value="enabled hot reload for backend and frontend during development" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/westos$user_info.coverage" NAME="user_info Coverage Results" MODIFIED="1775908861159" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/backend/app/services" />

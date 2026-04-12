@@ -9,6 +9,23 @@ export function formatDataFileName(fileName) {
   const withoutExtension = extension ? raw.slice(0, -extension.length) : raw;
   const withoutTimestamp = withoutExtension.replace(/^\d{14}_/, '');
 
+  // Special-case mappings for known filenames that should display with a friendly label
+  // Normalize to a lowercase, space-separated key for matching
+  const normalizedKey = withoutTimestamp
+    .toLowerCase()
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const specialDisplayMap = {
+    // Always show this CSV as "UsersRMR" (without extension)
+    'u users peoplesoft locations': 'UsersRMR',
+  };
+
+  if (specialDisplayMap[normalizedKey]) {
+    return specialDisplayMap[normalizedKey];
+  }
+
   const normalized = withoutTimestamp
     .replace(/[-_]+/g, ' ')
     .replace(/\s+/g, ' ')

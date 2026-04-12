@@ -77,6 +77,10 @@ export function getUploads() {
   return request(backendBaseUrl, '/uploads');
 }
 
+export function getKnowledgeBase() {
+  return request(backendBaseUrl, '/api/kb');
+}
+
 export function lookupReferenceGroups(searchText) {
   return request(backendBaseUrl, `/api/reference/groups/lookup?q=${encodeURIComponent(searchText)}`);
 }

@@ -6,6 +6,7 @@ from .reference import reference_bp
 from .group_cache import group_cache_bp
 from .endpoints_registry import endpoints_registry_bp
 from .work import work_bp
+from .kb import kb_bp
 
 
 def register_routes(app):
@@ -17,3 +18,4 @@ def register_routes(app):
     app.register_blueprint(reference_bp)
     app.register_blueprint(group_cache_bp)
     app.register_blueprint(endpoints_registry_bp)
+    app.register_blueprint(kb_bp)

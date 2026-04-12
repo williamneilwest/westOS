@@ -195,7 +195,43 @@ function getDefaultVisibleColumns(analysis) {
 }
 
 function findLatestActiveTicketsUpload(files = []) {
-  return files.find((file) => file?.filename?.toLowerCase().endsWith('.csv') && file.filename.toLowerCase().includes('activetickets')) || null;
+  // Files from /uploads are already newest-first.
+  // We only consider CSVs whose names clearly indicate Daily Digest or Active Tickets.
+  const isCsv = (f) => {
+    const name = String(f?.filename || '').toLowerCase();
+    const orig = String(f?.originalName || '').toLowerCase();
+    const mime = String(f?.mimeType || '').toLowerCase();
+    const nameCsv = name.endsWith('.csv') || orig.endsWith('.csv');
+    const mimeCsv = mime === 'text/csv' || mime === 'application/vnd.ms-excel';
+    return nameCsv || mimeCsv;
+  };
+
+  const normalizedName = (f) =>
+    String(f?.originalName || f?.filename || '')
+      .toLowerCase()
+      .replace(/[._-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const hasAll = (text, words) => words.every((w) => text.includes(w));
+
+  // 1) Prefer explicit Daily Digest
+  const digest = files.find((f) => isCsv(f) && hasAll(normalizedName(f), ['daily', 'digest']));
+  if (digest) return digest;
+
+  // 2) Then prefer Active + Ticket(s)
+  const activeTickets = files.find(
+    (f) =>
+      isCsv(f) && (hasAll(normalizedName(f), ['active', 'ticket']) || hasAll(normalizedName(f), ['active', 'tickets']))
+  );
+  if (activeTickets) return activeTickets;
+
+  // 3) Legacy compact naming like "activetickets"
+  const legacy = files.find((f) => isCsv(f) && normalizedName(f).includes('activetickets'));
+  if (legacy) return legacy;
+
+  // 4) No suitable CSV found
+  return null;
 }
 
 function buildLocalAnalysis(fileName, dataset) {

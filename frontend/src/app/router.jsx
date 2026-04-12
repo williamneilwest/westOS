@@ -81,6 +81,10 @@ export const router = createBrowserRouter([
         lazy: getRoute('../features/uploads/routes.jsx')
       },
       {
+        path: 'kb',
+        lazy: getRoute('../features/kb/routes.jsx')
+      },
+      {
         path: 'work',
         lazy: getRoute('../features/work/routes.jsx')
       },

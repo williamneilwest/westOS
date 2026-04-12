@@ -58,34 +58,159 @@ def is_csv_attachment(filename):
     return os.path.splitext(filename or '')[1].lower() == '.csv'
 
 
+# -----------------------------
+# Central helpers (public)
+# -----------------------------
+def clean_filename(name: str) -> str:
+    """Return a cleaned, safe filename component.
+
+    - Strips whitespace
+    - Uses werkzeug.secure_filename to normalize
+    - Returns empty string on malformed input
+    """
+    try:
+        return secure_filename((name or '').strip())
+    except Exception:
+        return ''
+
+
+def extract_original_name(saved_name: str) -> str:
+    """Extract the original filename portion from a stored name.
+
+    Supports multiple patterns to be robust to legacy/manual files:
+    - "<timestamp>_<name>"  (our standard saved format)
+    - "<timestamp> <name>"  (space separator)
+    - "<timestamp>-<name>"  (dash separator)
+
+    Where <timestamp> is 8–14 digits (e.g., YYYYMMDD or YYYYMMDDHHMMSS).
+    If no recognizable timestamp prefix exists, returns a cleaned fallback.
+    """
+    if not saved_name:
+        return ''
+
+    try:
+        base = os.path.basename(saved_name)
+    except Exception:
+        base = saved_name
+
+    # Fast path: our standard format "YYYYMMDDHHMMSS_<name>"
+    try:
+        underscore = base.index('_')
+        ts_part = base[:underscore]
+        if ts_part.isdigit() and 8 <= len(ts_part) <= 14:
+            return base[underscore + 1 :]
+    except ValueError:
+        pass
+
+    # General pattern: leading timestamp followed by space/underscore/dash
+    try:
+        import re  # local import to avoid global cost on cold paths
+
+        m = re.match(r"^(\d{8,14})[\s_-]+(.+)$", base)
+        if m:
+            return m.group(2)
+    except Exception:
+        pass
+
+    # Fallback: return a cleaned version of the input (safe, stable)
+    return clean_filename(base)
+
+
+def _build_file_url(filename: str) -> str:
+    """Generate a consistent URL for a stored file (back-compat path)."""
+    return f"/uploads/{filename}"
+
+
+def purge_previous_versions(clean_key: str) -> None:
+    """Remove previously saved files whose cleaned original name matches clean_key.
+
+    - clean_key should be lowercased, derived from clean_filename(original_name).
+    - Ignores timestamp prefixes.
+    - Safe on malformed input (no-ops on empty key).
+    - Logs removed duplicates.
+    """
+    ck = (clean_key or '').strip().lower()
+    if not ck:
+        return
+
+    try:
+        for name in os.listdir(UPLOAD_DIR):
+            # Skip metadata files
+            if name.endswith('.meta.json'):
+                continue
+
+            # Compare using cleaned, case-insensitive original component
+            original_component = clean_filename(extract_original_name(name)).lower()
+            if original_component != ck:
+                continue
+
+            file_path = os.path.join(UPLOAD_DIR, name)
+            meta_path = _metadata_path(name)
+
+            try:
+                os.remove(file_path)
+                print(f"[uploads] Removed older duplicate: {file_path}")
+            except OSError:
+                pass
+
+            try:
+                if os.path.exists(meta_path):
+                    os.remove(meta_path)
+            except OSError:
+                pass
+    except OSError:
+        # Upload directory might not be readable; ignore purge errors.
+        return
+
+
 def save_uploaded_attachment(file, source='manual'):
+    # Determine a stable comparison key for deduplication (cleaned, case-insensitive)
+    original_name = (file.filename or '').strip()
+    cleaned = clean_filename(original_name)
+    clean_key = cleaned.lower()
+
+    # Purge older iterations of the same cleaned filename (keep only the newest)
+    purge_previous_versions(clean_key)
+
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    safe_name = f"{timestamp}_{secure_filename(file.filename)}"
+    safe_name = f"{timestamp}_{cleaned}"
     path = os.path.join(UPLOAD_DIR, safe_name)
 
     file.save(path)
     _write_upload_metadata(safe_name, source)
 
+    print(f"[uploads] Saved file: {path} (source={source})")
+
     return {
         "filename": safe_name,
         "path": path,
-        "url": f"/uploads/{safe_name}",
+        "url": _build_file_url(safe_name),
     }
 
 
 def save_uploaded_attachment_bytes(filename, content, source='manual'):
+    # Determine a stable comparison key for deduplication (cleaned, case-insensitive)
+    original_name = (filename or '').strip()
+    cleaned = clean_filename(original_name)
+    clean_key = cleaned.lower()
+
+    # Purge older iterations of the same cleaned filename (keep only the newest)
+    purge_previous_versions(clean_key)
+
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    safe_name = f"{timestamp}_{secure_filename(filename)}"
+    safe_name = f"{timestamp}_{cleaned}"
     path = os.path.join(UPLOAD_DIR, safe_name)
 
     with open(path, 'wb') as handle:
         handle.write(content)
     _write_upload_metadata(safe_name, source)
 
+    print(f"[uploads] Saved file from bytes: {path} (source={source})")
+
     return {
         "filename": safe_name,
         "path": path,
-        "url": f"/uploads/{safe_name}",
+        "url": _build_file_url(safe_name),
     }
 
 
@@ -141,6 +266,11 @@ def iter_sendgrid_attachments():
         }
 
 
+def _extract_saved_original_name(saved_filename):
+    """Deprecated: use extract_original_name"""
+    return extract_original_name(saved_filename)
+
+
 @email_upload_bp.route("/webhooks/mailgun", methods=["POST"])
 def handle_incoming_email():
     saved_files = []
@@ -175,32 +305,71 @@ def handle_incoming_email():
 
 
 @email_upload_bp.route("/uploads", methods=["GET"])
+@email_upload_bp.route("/api/uploads", methods=["GET"])  # parallel API path (back-compat preserved)
 def list_uploads():
-    files = []
+    # Dedupe at read-time: group by cleaned original filename and keep only the most recent
+    files_by_key = {}
 
-    for name in sorted(os.listdir(UPLOAD_DIR), reverse=True):
+    try:
+        names = os.listdir(UPLOAD_DIR)
+    except OSError:
+        names = []
+
+    for name in names:
+        # Skip metadata sidecar files
         if name.endswith('.meta.json'):
             continue
 
-        file_path = os.path.join(UPLOAD_DIR, name)
-        modified_at = None
-        metadata = _read_upload_metadata(name)
+        full_path = os.path.join(UPLOAD_DIR, name)
+
+        # Basic file check
+        if not os.path.isfile(full_path):
+            continue
 
         try:
-            modified_at = datetime.fromtimestamp(os.path.getmtime(file_path), tz=timezone.utc).isoformat()
-        except OSError:
-            modified_at = None
+            original = extract_original_name(name)
+            clean_key = clean_filename(original).lower()
+            if not clean_key:
+                continue
+        except Exception:
+            continue
 
+        try:
+            modified_ts = os.path.getmtime(full_path)
+        except OSError:
+            modified_ts = 0
+
+        metadata = _read_upload_metadata(name)
+        source = str(metadata.get('source') or 'manual').strip() or 'manual'
+
+        # Keep only the newest file per cleaned key
+        prev = files_by_key.get(clean_key)
+        if (prev is None) or (modified_ts > prev["modified"]):
+            files_by_key[clean_key] = {
+                "name": name,
+                "original": original,
+                "modified": modified_ts,
+                "source": source,
+            }
+
+    # Build response list
+    files = []
+    for item in files_by_key.values():
         files.append({
-            "filename": name,
-            "url": f"/uploads/{name}",
-            "modifiedAt": modified_at,
-            "source": str(metadata.get('source') or 'manual').strip() or 'manual',
+            "filename": item["name"],
+            "originalName": item["original"],
+            "url": _build_file_url(item["name"]),
+            "modifiedAt": datetime.fromtimestamp(item["modified"], tz=timezone.utc).isoformat() if item["modified"] else None,
+            "source": item["source"],
         })
+
+    # Newest first
+    files.sort(key=lambda x: (x["modifiedAt"] or ""), reverse=True)
 
     return jsonify(files)
 
 
 @email_upload_bp.route("/uploads/<path:filename>", methods=["GET"])
+@email_upload_bp.route("/api/uploads/<path:filename>", methods=["GET"])  # parallel API path
 def get_upload(filename):
     return send_from_directory(UPLOAD_DIR, filename)
