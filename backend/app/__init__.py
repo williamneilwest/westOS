@@ -1,4 +1,5 @@
 import os
+import atexit
 from pathlib import Path
 
 from flask import Flask, send_from_directory
@@ -6,6 +7,7 @@ from dotenv import load_dotenv
 
 from .routes.email_upload import email_upload_bp
 from .routes import register_routes
+from .services.log_monitor import get_log_monitor, shutdown_log_monitor
 
 
 SPA_EXCLUDED_PREFIXES = (
@@ -60,10 +62,15 @@ def create_app():
         FOCUSED_MAX_ROWS=int(os.getenv('FOCUSED_MAX_ROWS', '5')),
         ENABLE_CHUNKING=os.getenv('ENABLE_CHUNKING', 'true').lower() == 'true',
         FRONTEND_BUILD_DIR=str(frontend_build_dir) if frontend_build_dir else '',
+        ENABLE_LOG_MONITOR=os.getenv('ENABLE_LOG_MONITOR', 'true').lower() == 'true',
     )
 
     register_routes(app)
     app.register_blueprint(email_upload_bp)
+
+    if app.config.get('ENABLE_LOG_MONITOR', True):
+        get_log_monitor(app)
+        atexit.register(lambda: shutdown_log_monitor(app))
 
     if frontend_build_dir:
         @app.get('/')

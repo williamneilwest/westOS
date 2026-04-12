@@ -58,6 +58,12 @@ export function getLogs({ source = 'docker', container = '', tail = 200 } = {}) 
   return request(backendBaseUrl, `/api/logs?${params.toString()}`);
 }
 
+export function getLogsSummary({ source = 'docker' } = {}) {
+  const params = new URLSearchParams();
+  params.set('source', source);
+  return request(backendBaseUrl, `/api/logs/summary?${params.toString()}`);
+}
+
 export function analyzeCsvFile(file) {
   const formData = new FormData();
   formData.append('file', file);

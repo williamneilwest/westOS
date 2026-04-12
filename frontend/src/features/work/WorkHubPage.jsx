@@ -1,81 +1,194 @@
-import { BarChart3, FileSpreadsheet, Mail, Search, Users, UsersRound } from 'lucide-react';
+import { BarChart3, Clock3, FileSpreadsheet, Mail, Search, Users, UsersRound } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardHeader } from '../../app/ui/Card';
+import { getUploads } from '../../app/services/api';
 import { SectionHeader } from '../../app/ui/SectionHeader';
+import { formatDataFileName } from '../../app/utils/fileDisplay';
+import { storage } from '../../app/utils/storage';
+import { getCachedWorkDataset } from './workDatasetCache';
 
-const workModules = [
+const LAST_ACTIVITY_KEY = 'westos.work.lastHubActivity';
+
+const coreModules = [
   {
     title: 'Active Tickets',
-    description: 'Open the full ticket CSV workspace with upload, recent runs, ticket cards, table view, and ticket drill-down.',
+    description: 'Open the ticket workspace with cards, table view, and ticket drill-down.',
     href: '/app/work/active-tickets',
     icon: FileSpreadsheet,
-    cta: 'Open Active Tickets',
+    cta: 'Open',
+    recommended: true,
   },
   {
     title: 'AI Metrics',
-    description: 'Review the computed ticket metrics and generate the AI summary built from the currently cached active dataset.',
+    description: 'Review computed metrics and generate AI summaries from your active dataset.',
     href: '/app/work/ai-metrics',
     icon: BarChart3,
-    cta: 'Open AI Metrics',
+    cta: 'Open',
   },
   {
     title: 'Email Uploads',
-    description: 'Browse files saved from inbound email intake and verify archived attachments delivered through SendGrid.',
+    description: 'Browse archived inbound files from the upload intake pipeline.',
     href: '/app/uploads',
     icon: Mail,
-    cta: 'Open Uploads',
-  },
-  {
-    title: 'User-Group Association',
-    description: 'Open a dedicated workspace to select a reference user, map target groups, and generate a reusable association script.',
-    href: '/app/work/user-group-association',
-    icon: UsersRound,
-    cta: 'Open Association Tool',
-  },
-  {
-    title: 'Group Search Tool',
-    description: 'Run the cache-first group search workflow from work and inspect results without going through the Reference Data page.',
-    href: '/app/work/group-search',
-    icon: Search,
-    cta: 'Open Group Search',
-  },
-  {
-    title: 'Get User Groups',
-    description: 'Call the Power Automate user-group flow with an OPID, resolve known group names from cache, and store unknown IDs in the group table.',
-    href: '/app/work/get-user-groups',
-    icon: Users,
-    cta: 'Open User Groups',
+    cta: 'Open',
   },
 ];
 
+const directoryModules = [
+  {
+    title: 'Group Search Tool',
+    description: 'Run cache-first group search without leaving the work module.',
+    href: '/app/work/group-search',
+    icon: Search,
+    cta: 'Open',
+  },
+  {
+    title: 'Get User Groups',
+    description: 'Resolve a user OPID to group memberships and cache results.',
+    href: '/app/work/get-user-groups',
+    icon: Users,
+    cta: 'Open',
+  },
+  {
+    title: 'User-Group Association',
+    description: 'Select users, target groups, and generate an association script.',
+    href: '/app/work/user-group-association',
+    icon: UsersRound,
+    cta: 'Open',
+  },
+];
+
+function ToolCard({ module, compact = false, onOpen }) {
+  return (
+    <Link
+      className={`ui-card work-tool-card${compact ? ' work-tool-card--compact' : ''}${module.recommended ? ' work-tool-card--recommended' : ''}`}
+      onClick={() => onOpen?.(module)}
+      state={{ from: '/app/work', label: 'Work Hub' }}
+      to={module.href}
+    >
+      <div className="work-tool-card__top">
+        <span className="work-tool-card__icon" aria-hidden="true">
+          <module.icon size={16} />
+        </span>
+        <div className="work-tool-card__copy">
+          <div className="work-tool-card__title-row">
+            <h3>{module.title}</h3>
+            {module.recommended ? <span className="ui-eyebrow">Recommended</span> : null}
+          </div>
+          <p title={module.description}>{module.description}</p>
+        </div>
+      </div>
+      <span className="compact-toggle">{module.cta}</span>
+    </Link>
+  );
+}
+
 export function WorkHubPage() {
+  const [lastActivity, setLastActivity] = useState(() => storage.get(LAST_ACTIVITY_KEY) || null);
+  const [latestUpload, setLatestUpload] = useState('None');
+  const cachedDataset = getCachedWorkDataset();
+
+  const quickActions = useMemo(() => coreModules.slice(0, 3), []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getUploads()
+      .then((files) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const items = Array.isArray(files) ? files : [];
+        if (!items.length) {
+          setLatestUpload('None');
+          return;
+        }
+
+        const latest = [...items].sort((left, right) => {
+          const leftTime = Date.parse(left.modifiedAt || '') || 0;
+          const rightTime = Date.parse(right.modifiedAt || '') || 0;
+          return rightTime - leftTime;
+        })[0];
+
+        setLatestUpload(formatDataFileName(latest?.filename) || 'Unknown file');
+      })
+      .catch(() => {
+        if (isMounted) {
+          setLatestUpload('Unavailable');
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  function handleModuleOpen(module) {
+    const next = {
+      title: module.title,
+      href: module.href,
+      openedAt: new Date().toISOString(),
+    };
+    setLastActivity(next);
+    storage.set(LAST_ACTIVITY_KEY, next);
+  }
+
   return (
     <section className="module">
       <SectionHeader
         tag="/app/work"
         title="Work Hub"
-        description="Central routing for work-related tools. Open the ticket workspace, inspect AI metrics, search groups, resolve user group memberships, generate user-group association scripts, or review archived inbound uploads."
+        description="Start with Active Tickets or review AI Metrics from your latest dataset."
       />
 
-      <div className="card-grid">
-        {workModules.map((module) => (
-          <Card className="landing__card" key={module.href}>
-            <CardHeader
-              eyebrow="Work Module"
-              title={module.title}
-              description={module.description}
-            />
-            <div className="landing__actions">
-              <span className="icon-badge">
-                <module.icon size={18} />
-              </span>
-              <Link className="ui-button ui-button--secondary" to={module.href} state={{ from: '/app/work', label: 'Work Hub' }}>
-                {module.cta}
-              </Link>
-            </div>
-          </Card>
+      <div className="work-quick-actions" role="group" aria-label="Quick actions">
+        {quickActions.map((module, index) => (
+          <Link
+            key={module.href}
+            className={`work-quick-action${index === 0 ? ' work-quick-action--primary' : ''}`}
+            onClick={() => handleModuleOpen(module)}
+            state={{ from: '/app/work', label: 'Work Hub' }}
+            to={module.href}
+          >
+            <module.icon size={16} />
+            <span>{module.title}</span>
+          </Link>
         ))}
       </div>
+
+      <div className="work-activity-strip">
+        <span>
+          <Clock3 size={14} />
+          Last opened: {lastActivity?.title || 'None'}
+        </span>
+        <span>Last upload: {latestUpload}</span>
+        <span>Recent ticket run: {formatDataFileName(cachedDataset?.fileName) || 'None'}</span>
+      </div>
+
+      <section className="work-section">
+        <header className="work-section__header">
+          <strong>Core Workflow</strong>
+          <small>Primary launch points for ticket analysis</small>
+        </header>
+        <div className="work-tools-grid">
+          {coreModules.map((module) => (
+            <ToolCard key={module.href} module={module} onOpen={handleModuleOpen} />
+          ))}
+        </div>
+      </section>
+
+      <section className="work-section">
+        <header className="work-section__header">
+          <strong>User & Directory Tools</strong>
+          <small>Directory automation and membership lookups</small>
+        </header>
+        <div className="work-tools-grid work-tools-grid--compact">
+          {directoryModules.map((module) => (
+            <ToolCard key={module.href} compact module={module} onOpen={handleModuleOpen} />
+          ))}
+        </div>
+      </section>
     </section>
   );
 }
