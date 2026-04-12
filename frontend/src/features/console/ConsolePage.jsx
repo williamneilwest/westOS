@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, Cpu, RefreshCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getSystemStatus } from '../../app/services/api';
+import { getServices, getSystemStatus } from '../../app/services/api';
 import { Button } from '../../app/ui/Button';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { SectionHeader } from '../../app/ui/SectionHeader';
@@ -10,6 +10,9 @@ import { LogsPanel } from './LogsPanel';
 
 function formatServiceLabel(label) {
   if (label === 'frontend') {
+    return 'UI (served by backend)';
+  }
+  if (label === 'ui') {
     return 'UI (served by backend)';
   }
   return String(label || '').replace(/[_-]+/g, ' ').trim();
@@ -50,14 +53,28 @@ function buildOperationalSummary(services) {
 }
 
 function getServiceUrl(label) {
-  if (label === 'backend') {
+  const normalized = String(label || '').toLowerCase();
+
+  if (normalized === 'backend') {
     return '/health';
   }
-  if (label === 'ai-gateway') {
+  if (normalized === 'ai-gateway') {
     return '/api/ai/health';
   }
-  if (label === 'frontend') {
+  if (normalized === 'frontend' || normalized === 'ui') {
     return '/';
+  }
+  if (normalized === 'grafana' || normalized.includes('grafana')) {
+    return 'https://grafana.westos.dev';
+  }
+  if (normalized === 'portainer' || normalized.includes('portainer')) {
+    return 'https://portainer.westos.dev';
+  }
+  if (normalized === 'filebrowser' || normalized.includes('filebrowser') || normalized === 'files') {
+    return 'https://files.westos.dev';
+  }
+  if (normalized === 'code-server' || normalized.includes('code-server') || normalized === 'code') {
+    return 'https://code.westos.dev';
   }
   return '';
 }
@@ -72,11 +89,52 @@ function getPreferredLogContainer(services) {
     return 'backend';
   }
 
-  if (firstImpacted.label === 'frontend') {
+  if (firstImpacted.label === 'frontend' || firstImpacted.label === 'ui') {
     return 'backend';
   }
 
-  return firstImpacted.label || 'backend';
+  return firstImpacted.container || firstImpacted.label || 'backend';
+}
+
+function classifyServiceGroup(name) {
+  const normalized = String(name || '').toLowerCase();
+  if (normalized === 'backend' || normalized === 'ai-gateway' || normalized === 'frontend' || normalized === 'ui') {
+    return 'Core Services';
+  }
+
+  if (
+    normalized.includes('portainer')
+    || normalized.includes('grafana')
+    || normalized.includes('caddy')
+    || normalized.includes('prometheus')
+    || normalized.includes('loki')
+    || normalized.includes('promtail')
+    || normalized.includes('cadvisor')
+    || normalized.includes('database')
+    || normalized.includes('postgres')
+  ) {
+    return 'Infrastructure';
+  }
+
+  return 'Other';
+}
+
+function mapDockerHealth(health) {
+  return String(health || '').toLowerCase() === 'healthy' ? 'ok' : 'down';
+}
+
+function mapCoreStatusByName(name, status) {
+  const normalized = String(name || '').toLowerCase();
+  if (normalized === 'backend') {
+    return mapStatus(status?.backend);
+  }
+  if (normalized === 'ai-gateway') {
+    return mapStatus(status?.ai_gateway);
+  }
+  if (normalized === 'frontend' || normalized === 'ui') {
+    return mapStatus(status?.frontend);
+  }
+  return '';
 }
 
 export function ConsolePage() {
@@ -90,22 +148,71 @@ export function ConsolePage() {
     setIsLoading(true);
 
     try {
-      const result = await getSystemStatus();
-      const status = result.data;
-      const nextServices = [
-        { label: 'backend', status: mapStatus(status.backend), details: status.details?.backend || {} },
-        { label: 'ai-gateway', status: mapStatus(status.ai_gateway), details: status.details?.ai_gateway || {} },
-        { label: 'frontend', status: mapStatus(status.frontend), details: status.details?.frontend || {} },
-      ];
+      const [systemResult, servicesResult] = await Promise.all([getSystemStatus(), getServices()]);
+      const status = systemResult?.data || {};
+      const discovered = Array.isArray(servicesResult?.services) ? servicesResult.services : [];
+
+      const nextServices = discovered.map((service) => {
+        const label = String(service?.name || '').trim();
+        const coreStatus = mapCoreStatusByName(label, status);
+        return {
+          label,
+          container: label,
+          status: coreStatus || mapDockerHealth(service?.health),
+          details: {
+            ...(status?.details?.[label] || {}),
+            statusText: service?.status || '',
+          },
+          image: service?.image || 'n/a',
+          ports: service?.ports || 'n/a',
+          group: classifyServiceGroup(label),
+        };
+      });
+
+      const hasUiEntry = nextServices.some((service) => String(service.label || '').toLowerCase() === 'frontend' || String(service.label || '').toLowerCase() === 'ui');
+      if (!hasUiEntry) {
+        nextServices.push({
+          label: 'frontend',
+          container: 'backend',
+          status: mapStatus(status?.frontend),
+          details: status?.details?.frontend || {},
+          image: 'served-by-backend',
+          ports: 'via backend',
+          group: 'Core Services',
+        });
+      }
+      if (!nextServices.some((service) => String(service.label || '').toLowerCase() === 'backend')) {
+        nextServices.push({
+          label: 'backend',
+          container: 'backend',
+          status: mapStatus(status?.backend),
+          details: status?.details?.backend || {},
+          image: 'n/a',
+          ports: 'n/a',
+          group: 'Core Services',
+        });
+      }
+      if (!nextServices.some((service) => String(service.label || '').toLowerCase() === 'ai-gateway')) {
+        nextServices.push({
+          label: 'ai-gateway',
+          container: 'ai-gateway',
+          status: mapStatus(status?.ai_gateway),
+          details: status?.details?.ai_gateway || {},
+          image: 'n/a',
+          ports: 'n/a',
+          group: 'Core Services',
+        });
+      }
+
       setSystemStatus(status);
       setServices(nextServices);
       setRequestedLogContainer(getPreferredLogContainer(nextServices));
     } catch {
       setSystemStatus(null);
       const fallbackServices = [
-        { label: 'backend', status: 'down', details: {} },
-        { label: 'ai-gateway', status: 'down', details: {} },
-        { label: 'frontend', status: 'down', details: {} },
+        { label: 'backend', container: 'backend', status: 'down', details: {}, image: 'n/a', ports: 'n/a', group: 'Core Services' },
+        { label: 'ai-gateway', container: 'ai-gateway', status: 'down', details: {}, image: 'n/a', ports: 'n/a', group: 'Core Services' },
+        { label: 'frontend', container: 'backend', status: 'down', details: {}, image: 'served-by-backend', ports: 'via backend', group: 'Core Services' },
       ];
       setServices(fallbackServices);
       setRequestedLogContainer(getPreferredLogContainer(fallbackServices));
@@ -128,6 +235,18 @@ export function ConsolePage() {
   const summaryText = buildOperationalSummary(services);
   const hasIssues = downCount > 0 || warningCount > 0 || misconfiguredCount > 0;
   const impactedServices = services.filter((service) => service.status !== 'ok');
+  const groupedServices = useMemo(() => {
+    const groups = {
+      'Core Services': [],
+      Infrastructure: [],
+      Other: [],
+    };
+    services.forEach((service) => {
+      const groupName = groups[service.group] ? service.group : 'Other';
+      groups[groupName].push(service);
+    });
+    return groups;
+  }, [services]);
 
   function focusLogs(container = '') {
     if (container) {
@@ -223,7 +342,7 @@ export function ConsolePage() {
               <button
                 key={`${service.label}-logs`}
                 className="compact-toggle"
-                onClick={() => focusLogs(service.label)}
+                onClick={() => focusLogs(service.container || service.label)}
                 type="button"
               >
                 {`View ${formatServiceLabel(service.label)} logs`}
@@ -236,57 +355,65 @@ export function ConsolePage() {
         </Card>
       ) : null}
 
-      <div className="console-service-grid">
-        {services.map((service) => (
-          <div
-            key={service.label}
-            className={`console-service-card console-service-card--${service.status}`}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                focusLogs(service.label);
-              }
-            }}
-            onClick={() => focusLogs(service.label)}
-            role="button"
-            tabIndex={0}
-          >
-            <div className="console-service-card__header">
-              <span className="console__service">
-                <i className={`status-dot status-dot--${service.status}`} />
-                {formatServiceLabel(service.label)}
-              </span>
-              <strong>{service.status}</strong>
-            </div>
-            <div className="console-service-card__meta">
-              <small>{`Last check: ${systemStatus?.timestamp || 'n/a'}`}</small>
-              <small>{`HTTP: ${service.details?.httpStatus || 'n/a'}`}</small>
-            </div>
-            <div className="console-service-card__actions">
-              <button
-                className="compact-toggle"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  focusLogs(service.label);
-                }}
-                type="button"
-              >
-                View logs
-              </button>
-              <button
-                className="compact-toggle"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openService(service.label);
-                }}
-                type="button"
-              >
-                Open service
-              </button>
+      {Object.entries(groupedServices).map(([groupName, groupItems]) => (
+        groupItems.length ? (
+          <div key={groupName}>
+            <SectionHeader tag="/console/services" title={groupName} description={`${groupItems.length} service${groupItems.length === 1 ? '' : 's'}`} />
+            <div className="console-service-grid">
+              {groupItems.map((service) => (
+                <div
+                  key={`${groupName}-${service.label}`}
+                  className={`console-service-card console-service-card--${service.status}`}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      focusLogs(service.container || service.label);
+                    }
+                  }}
+                  onClick={() => focusLogs(service.container || service.label)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="console-service-card__header">
+                    <span className="console__service">
+                      <i className={`status-dot status-dot--${service.status}`} />
+                      {formatServiceLabel(service.label)}
+                    </span>
+                    <strong>{service.status}</strong>
+                  </div>
+                  <div className="console-service-card__meta">
+                    <small>{`Image: ${service.image || 'n/a'}`}</small>
+                    <small>{`Ports: ${service.ports || 'n/a'}`}</small>
+                    <small>{`HTTP: ${service.details?.httpStatus || 'n/a'}`}</small>
+                  </div>
+                  <div className="console-service-card__actions">
+                    <button
+                      className="compact-toggle"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        focusLogs(service.container || service.label);
+                      }}
+                      type="button"
+                    >
+                      View logs
+                    </button>
+                    <button
+                      className="compact-toggle"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openService(service.label);
+                      }}
+                      type="button"
+                    >
+                      Open service
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
+        ) : null
+      ))}
 
       <details className="console-endpoints-module">
         <summary>API Endpoints Registry</summary>

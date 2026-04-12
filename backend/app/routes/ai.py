@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timezone
 
 from requests import RequestException
+from requests.exceptions import Timeout
 from flask import Blueprint, current_app, jsonify, request
 
 from .email_upload import clean_filename
@@ -257,8 +258,10 @@ def chat():
             )
         except ValueError as error:
             return jsonify({'error': str(error)}), 400
+        except Timeout:
+            return jsonify({'status': 'timeout', 'error': 'AI request timed out'}), 504
         except RequestException as error:
-            return jsonify({'error': f'AI request failed: {error}'}), 503
+            return jsonify({'status': 'error', 'error': f'AI request failed: {error}'}), 502
 
     payload = _gateway_payload(raw_payload)
 
@@ -267,8 +270,10 @@ def chat():
         return jsonify(build_compat_chat_response(payload, result))
     except ValueError as error:
         return jsonify({'error': str(error)}), 400
+    except Timeout:
+        return jsonify({'status': 'timeout', 'error': 'AI request timed out'}), 504
     except RequestException as error:
-        return jsonify({'error': f'AI request failed: {error}'}), 503
+        return jsonify({'status': 'error', 'error': f'AI request failed: {error}'}), 502
 
 
 @ai_bp.post('/ai/v1/chat/completions')

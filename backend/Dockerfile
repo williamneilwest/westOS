@@ -15,4 +15,4 @@ COPY . .
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "gunicorn --bind ${GUNICORN_BIND:-0.0.0.0:5000} wsgi:app"]
+CMD ["sh", "-c", "gunicorn --bind ${GUNICORN_BIND:-0.0.0.0:5000} --timeout ${GUNICORN_TIMEOUT:-60} wsgi:app"]

@@ -5,7 +5,9 @@ from time import perf_counter
 import requests
 
 
-DEFAULT_TIMEOUT_SECONDS = 120
+DEFAULT_CONNECT_TIMEOUT_SECONDS = 5
+DEFAULT_READ_TIMEOUT_SECONDS = 20
+DEFAULT_REQUEST_TIMEOUT = (DEFAULT_CONNECT_TIMEOUT_SECONDS, DEFAULT_READ_TIMEOUT_SECONDS)
 MAX_PROMPT_CHARS = 12000
 ACK_PATTERNS = [
     r'thank you for contacting.*?(?=\n|$)',
@@ -177,7 +179,7 @@ def sanitize_payload(payload):
     return sanitized
 
 
-def call_gateway_chat(payload, gateway_base_url, timeout_seconds=DEFAULT_TIMEOUT_SECONDS):
+def call_gateway_chat(payload, gateway_base_url, timeout_seconds=DEFAULT_REQUEST_TIMEOUT):
     sanitized_payload = sanitize_payload(payload)
     response = requests.post(
         f"{gateway_base_url.rstrip('/')}/v1/chat/completions",
@@ -193,7 +195,7 @@ def call_gateway_openai_chat(payload, gateway_base_url):
     response = requests.post(
         f"{gateway_base_url.rstrip('/')}/v1/chat/completions",
         json=sanitized_payload,
-        timeout=DEFAULT_TIMEOUT_SECONDS,
+        timeout=DEFAULT_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json()
@@ -216,7 +218,7 @@ def call_ollama_generate(payload, ollama_api_base, ollama_model):
     response = requests.post(
         f"{ollama_api_base.rstrip('/')}/api/generate",
         json=request_payload,
-        timeout=DEFAULT_TIMEOUT_SECONDS,
+        timeout=DEFAULT_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     result = response.json()

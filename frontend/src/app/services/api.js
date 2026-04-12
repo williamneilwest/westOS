@@ -64,6 +64,10 @@ export function getLogsSummary({ source = 'docker' } = {}) {
   return request(backendBaseUrl, `/api/logs/summary?${params.toString()}`);
 }
 
+export function getServices() {
+  return request(backendBaseUrl, '/api/services');
+}
+
 export function analyzeCsvFile(file) {
   const formData = new FormData();
   formData.append('file', file);
