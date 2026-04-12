@@ -1,6 +1,5 @@
 import { ArrowRight, Blocks, BrainCircuit, BookText, HeartPulse, TerminalSquare, BriefcaseBusiness } from 'lucide-react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { modules } from '../../app/shell/modules';
+import { Link } from 'react-router-dom';
 
 const primaryAction = {
   href: '/app',
@@ -61,37 +60,8 @@ const systemStatus = [
 ];
 
 export function LandingPage() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const currentModule = modules.find((m) => location.pathname.startsWith(m.href));
-
-  function onMobileNavChange(e) {
-    const value = e.target.value;
-    if (value) navigate(value);
-  }
-
   return (
     <section className="landing">
-      <div className="shell__mobile-topbar" role="navigation" aria-label="Mobile page selector">
-        <select
-          className="shell__mobile-select"
-          value={currentModule?.href || ''}
-          onChange={onMobileNavChange}
-          aria-label="Select page"
-        >
-          {!currentModule && (
-            <option value="" disabled>
-              westOS
-            </option>
-          )}
-          {modules.map((m) => (
-            <option key={m.href} value={m.href}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
       <header className="ui-card landing__hero landing__panel">
         <div className="landing__hero-copy">
           <span className="shell__eyebrow">Public surface</span>

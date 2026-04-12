@@ -142,6 +142,22 @@ function getContextTitle(pathname) {
 }
 
 function getBackTarget(pathname) {
+  if (pathname === '/app') {
+    return '/';
+  }
+
+  if (pathname === '/app/life' || pathname === '/app/work' || pathname === '/app/data') {
+    return '/app';
+  }
+
+  if (pathname === '/app/ai' || pathname === '/app/kb' || pathname === '/app/console' || pathname === '/app/settings') {
+    return '/app';
+  }
+
+  if (pathname === '/app/uploads' || pathname === '/app/reference') {
+    return '/app/work';
+  }
+
   if (pathname.startsWith('/tickets/')) {
     return '/app/work/active-tickets';
   }
@@ -159,11 +175,15 @@ function getBackTarget(pathname) {
   }
 
   if (pathname.startsWith('/app/kb')) {
-    return '/app/work';
+    return '/app/kb';
   }
 
   if (pathname.startsWith('/app/ai/documents')) {
     return '/app/ai';
+  }
+
+  if (pathname.startsWith('/app/console/endpoints')) {
+    return '/app/console';
   }
 
   if (pathname.startsWith('/app/')) {
@@ -264,9 +284,13 @@ export function AppShell() {
 
   const recommendedHref = lastUsedModule?.href || '/app/work';
 
-  function onMobileNavChange(e) {
-    const value = e.target.value;
-    if (value) navigate(value);
+  function onTopbarBack() {
+    if (typeof window !== 'undefined' && window.history?.state?.idx > 0) {
+      navigate(-1);
+      return;
+    }
+
+    navigate(backTarget);
   }
 
   useEffect(() => {
@@ -471,9 +495,9 @@ export function AppShell() {
 
       <main className="shell__content">
         <header className="shell__topbar">
-          <NavLink to={backTarget} className="shell__home-back" aria-label="Go back">
+          <button className="shell__home-back" aria-label="Go back" type="button" onClick={onTopbarBack}>
             <ArrowLeft size={14} />
-          </NavLink>
+          </button>
           <h2 className="shell__context-title">{contextTitle}</h2>
           <div className="shell__topbar-actions">
             <button
@@ -503,25 +527,6 @@ export function AppShell() {
               </NavLink>
             ) : null}
             <AssistantPopover />
-          </div>
-          <div className="shell__mobile-topbar" role="navigation" aria-label="Mobile page selector">
-            <select
-              className="shell__mobile-select"
-              value={currentModule?.href || ''}
-              onChange={onMobileNavChange}
-              aria-label="Select page"
-            >
-              {!currentModule && (
-                <option value="" disabled>
-                  {contextTitle}
-                </option>
-              )}
-              {modules.map((m) => (
-                <option key={m.href} value={m.href}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
           </div>
         </header>
 
