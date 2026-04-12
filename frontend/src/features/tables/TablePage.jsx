@@ -446,7 +446,7 @@ export function TablePage() {
   }
 
   return (
-    <section className="module">
+    <section className="module module--dataset-surface">
       {error ? <p className="status-text status-text--error">{error}</p> : null}
 
       {isDatasetInfoOpen ? (
@@ -625,11 +625,45 @@ export function TablePage() {
           title={formatDataFileName(dataset.fileName) || 'CSV table'}
           description="A shared renderer for uploaded CSV datasets and cached work datasets."
           action={
-            <div className="table-actions">
+            <div className="ticket-toolbar__actions">
               <button className="compact-toggle" onClick={() => setIsDatasetInfoOpen(true)} type="button">
                 <TableProperties size={15} />
                 Dataset Panel
               </button>
+              <div className="ticket-view-toggle" role="tablist" aria-label="Dataset view">
+                <button
+                  aria-pressed="false"
+                  className="compact-toggle"
+                  onClick={() =>
+                    navigate('/app/work/active-tickets', {
+                      state: {
+                        from: `${location.pathname}${location.search || ''}`,
+                        label: 'Table Viewer',
+                      },
+                    })
+                  }
+                  type="button"
+                >
+                  Cards
+                </button>
+                <button aria-pressed="true" className="compact-toggle compact-toggle--active" type="button">
+                  Table
+                </button>
+                <button
+                  className="compact-toggle"
+                  onClick={() =>
+                    navigate('/app/work/ai-metrics', {
+                      state: {
+                        from: `${location.pathname}${location.search || ''}`,
+                        label: 'Table Viewer',
+                      },
+                    })
+                  }
+                  type="button"
+                >
+                  AI Metrics
+                </button>
+              </div>
               <button className="compact-toggle" onClick={goBack} type="button">
                 <ArrowLeft size={15} />
                 {`Back to ${backLabel}`}

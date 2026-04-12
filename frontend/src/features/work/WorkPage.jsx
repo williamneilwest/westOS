@@ -1189,7 +1189,7 @@ export function WorkPage() {
   }
 
   return (
-    <section className="module">
+    <section className="module module--dataset-surface">
       {error ? <p className="status-text status-text--error">{error}</p> : null}
       {aiError ? <p className="status-text status-text--error">{aiError}</p> : null}
       {isLoadingSavedRun ? <p className="status-text">Loading saved run dataset...</p> : null}

@@ -946,6 +946,12 @@ textarea {
   box-shadow: var(--shadow-glow);
 }
 
+.module--dataset-surface .ui-card:hover {
+  transform: none;
+  border-color: var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
 .ui-card--accent {
   background:
     radial-gradient(circle at top right, rgba(20, 184, 166, 0.14), transparent 34%),
@@ -2937,6 +2943,12 @@ textarea {
 .ticket-card-link:focus-visible .ticket-card {
   border-color: rgba(16, 185, 129, 0.28);
   box-shadow: var(--shadow-glow);
+}
+
+.module--dataset-surface .ticket-card-link:hover .ticket-card,
+.module--dataset-surface .ticket-card-link:focus-visible .ticket-card {
+  border-color: var(--border);
+  box-shadow: var(--shadow-soft);
 }
 
 .ticket-card__header,
