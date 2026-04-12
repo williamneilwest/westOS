@@ -522,9 +522,9 @@ export function AppShell() {
             <button className="shell__home-back" aria-label="Go back" type="button" onClick={onTopbarBack}>
               <ArrowLeft size={14} />
             </button>
+            <h2 className="shell__context-title">{contextTitle}</h2>
           </div>
           <div className="shell__topbar-right">
-            <h2 className="shell__context-title">{contextTitle}</h2>
             <div className="shell__topbar-actions">
               {isMobileViewport ? (
                 <button

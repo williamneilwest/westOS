@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, BarChart3, FileSpreadsheet, Upload, X } from 'lucide-react';
+import { ArrowLeft, FileSpreadsheet, X } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getRecentCsvAnalyses, getRecentCsvAnalysisFile, getUploadFile, getUploads } from '../../app/services/api';
 import { useBackNavigation } from '../../app/hooks/useBackNavigation';
@@ -377,6 +377,7 @@ export function TablePage() {
     const ticketId = getTicketId(row, dataset.columns || []);
 
     if (ticketId && ticketId !== 'Untitled ticket') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
       navigate(`/tickets/${encodeURIComponent(ticketId)}`, {
         state: {
           from: `${location.pathname}${location.search || ''}`,
@@ -503,50 +504,49 @@ export function TablePage() {
         uploadedFiles={uploadedFiles.filter((file) => file.filename.toLowerCase().endsWith('.csv'))}
         isLoadingUploads={isLoadingUploads}
         onUploadSelect={(file) => void handleUploadedFileSelection(file)}
-        controls={(
-          <div className="ticket-toolbar ticket-toolbar--compact">
-            <div className="ticket-toolbar__actions">
-              <input
-                aria-label="Search dataset rows"
-                className="data-table__search"
-                onChange={(event) => setGlobalSearch(event.target.value)}
-                placeholder="Search visible columns..."
-                type="text"
-                value={globalSearch}
-              />
-              <div className="ticket-view-toggle" role="tablist" aria-label="Dataset view">
-                <button
-                  aria-pressed={datasetView === 'cards'}
-                  className={datasetView === 'cards' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
-                  onClick={() => setDatasetView('cards')}
-                  type="button"
-                >
-                  Cards
-                </button>
-                <button
-                  aria-pressed={datasetView === 'table'}
-                  className={datasetView === 'table' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
-                  onClick={() => setDatasetView('table')}
-                  type="button"
-                >
-                  Table
-                </button>
-                <button
-                  aria-pressed={datasetView === 'metrics'}
-                  className={datasetView === 'metrics' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
-                  onClick={() => setDatasetView('metrics')}
-                  type="button"
-                >
-                  <BarChart3 size={14} />
-                  Metrics
-                </button>
-              </div>
-              <button className="compact-toggle" onClick={goBack} type="button">
-                <ArrowLeft size={15} />
-                {`Back to ${backLabel}`}
+        leftControls={(
+          <input
+            aria-label="Search dataset rows"
+            className="data-table__search"
+            onChange={(event) => setGlobalSearch(event.target.value)}
+            placeholder="Search..."
+            type="text"
+            value={globalSearch}
+          />
+        )}
+        rightControls={(
+          <>
+            <div className="ticket-view-toggle" role="tablist" aria-label="Dataset view">
+              <button
+                aria-pressed={datasetView === 'cards'}
+                className={datasetView === 'cards' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                onClick={() => setDatasetView('cards')}
+                type="button"
+              >
+                Cards
+              </button>
+              <button
+                aria-pressed={datasetView === 'table'}
+                className={datasetView === 'table' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                onClick={() => setDatasetView('table')}
+                type="button"
+              >
+                Table
+              </button>
+              <button
+                aria-pressed={datasetView === 'metrics'}
+                className={datasetView === 'metrics' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                onClick={() => setDatasetView('metrics')}
+                type="button"
+              >
+                Metrics
               </button>
             </div>
-          </div>
+            <button className="compact-toggle" onClick={goBack} type="button">
+              <ArrowLeft size={15} />
+              {`Back to ${backLabel}`}
+            </button>
+          </>
         )}
       >
         <Card className="analysis-grid__wide">
@@ -557,7 +557,6 @@ export function TablePage() {
           />
 
           <div className="ticket-source-banner ticket-source-banner--compact">
-            <span>{filteredRows.length} {filteredRows.length === 1 ? 'row' : 'rows'}</span>
             <span>{visibleColumns.length} columns visible</span>
           </div>
 

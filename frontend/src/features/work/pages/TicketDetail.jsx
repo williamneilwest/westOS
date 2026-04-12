@@ -215,6 +215,10 @@ export function TicketDetail() {
   );
 
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [decodedTicketId]);
+
+  useEffect(() => {
     setAnalysisResult(ticket?.ai_analysis?.result || '');
   }, [ticket?.ai_analysis?.result]);
 

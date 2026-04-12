@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BarChart3,
-  Clock3,
   FileSpreadsheet,
-  History,
   MessageSquareText,
   Tag,
-  Upload,
   X,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -1096,6 +1092,7 @@ export function WorkPage() {
       return;
     }
 
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     navigate(`/tickets/${encodeURIComponent(ticketId)}`, {
       state: {
         from: `${location.pathname}${location.search || ''}`,
@@ -1179,80 +1176,74 @@ export function WorkPage() {
             uploadedFiles={csvUploads}
             isLoadingUploads={isLoadingUploads}
             onUploadSelect={(file) => void handleUploadedFileSelection(file)}
-            controls={(
-              <div className="ticket-toolbar ticket-toolbar--compact">
-                <div className="ticket-toolbar__header">
-                  <span className="ticket-source-banner__pill">
-                    {visibleTickets.length} {visibleTickets.length === 1 ? 'row' : 'rows'}
-                  </span>
-                </div>
-                <div className="ticket-toolbar__actions">
-                  <input
-                    aria-label="Search dataset rows"
-                    className="data-table__search"
-                    onChange={(event) => setDatasetGlobalSearch(event.target.value)}
-                    placeholder="Search visible columns..."
-                    type="text"
-                    value={datasetGlobalSearch}
-                  />
-                  {datasetAssigneeColumn ? (
-                    <select
-                      className="ticket-queue__filter"
-                      onChange={(event) => setAssigneeFilter(event.target.value)}
-                      value={assigneeFilter}
-                    >
-                      <option value="">All assignees</option>
-                      {assigneeOptions.map((assignee) => (
-                        <option key={assignee} value={assignee}>{assignee}</option>
-                      ))}
-                    </select>
-                  ) : null}
+            leftControls={(
+              <input
+                aria-label="Search dataset rows"
+                className="data-table__search"
+                onChange={(event) => setDatasetGlobalSearch(event.target.value)}
+                placeholder="Search..."
+                type="text"
+                value={datasetGlobalSearch}
+              />
+            )}
+            rightControls={(
+              <>
+                {datasetAssigneeColumn ? (
+                  <select
+                    className="ticket-queue__filter"
+                    onChange={(event) => setAssigneeFilter(event.target.value)}
+                    value={assigneeFilter}
+                  >
+                    <option value="">Assignee</option>
+                    {assigneeOptions.map((assignee) => (
+                      <option key={assignee} value={assignee}>{assignee}</option>
+                    ))}
+                  </select>
+                ) : null}
+                <button
+                  aria-pressed={showOnlyFlaggedTickets}
+                  className={showOnlyFlaggedTickets ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                  onClick={() => setShowOnlyFlaggedTickets((current) => !current)}
+                  type="button"
+                >
+                  Flagged
+                </button>
+                <button
+                  className="compact-toggle"
+                  disabled={!analysis || loadingAI || isLoadingSavedRun}
+                  onClick={handleAiAnalysis}
+                  type="button"
+                >
+                  <MessageSquareText size={14} />
+                  {loadingAI ? 'AI...' : 'Run AI'}
+                </button>
+                <div className="ticket-view-toggle" role="tablist" aria-label="Dataset view">
                   <button
-                    aria-pressed={showOnlyFlaggedTickets}
-                    className={showOnlyFlaggedTickets ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
-                    onClick={() => setShowOnlyFlaggedTickets((current) => !current)}
+                    aria-pressed={datasetView === 'cards'}
+                    className={datasetView === 'cards' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                    onClick={() => setDatasetView('cards')}
                     type="button"
                   >
-                    Show flagged
+                    Cards
                   </button>
                   <button
-                    className="compact-toggle"
-                    disabled={!analysis || loadingAI || isLoadingSavedRun}
-                    onClick={handleAiAnalysis}
+                    aria-pressed={datasetView === 'table'}
+                    className={datasetView === 'table' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                    onClick={() => setDatasetView('table')}
                     type="button"
                   >
-                    <MessageSquareText size={15} />
-                    {loadingAI ? 'Running AI...' : 'Run AI'}
+                    Table
                   </button>
-                  <div className="ticket-view-toggle" role="tablist" aria-label="Dataset view">
-                    <button
-                      aria-pressed={datasetView === 'cards'}
-                      className={datasetView === 'cards' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
-                      onClick={() => setDatasetView('cards')}
-                      type="button"
-                    >
-                      Cards
-                    </button>
-                    <button
-                      aria-pressed={datasetView === 'table'}
-                      className={datasetView === 'table' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
-                      onClick={() => setDatasetView('table')}
-                      type="button"
-                    >
-                      Table
-                    </button>
-                    <button
-                      aria-pressed={datasetView === 'metrics'}
-                      className={datasetView === 'metrics' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
-                      onClick={() => setDatasetView('metrics')}
-                      type="button"
-                    >
-                      <BarChart3 size={15} />
-                      Metrics
-                    </button>
-                  </div>
+                  <button
+                    aria-pressed={datasetView === 'metrics'}
+                    className={datasetView === 'metrics' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                    onClick={() => setDatasetView('metrics')}
+                    type="button"
+                  >
+                    Metrics
+                  </button>
                 </div>
-              </div>
+              </>
             )}
           >
             <section className="analysis-grid">
