@@ -47,6 +47,17 @@ export function getSystemStatus() {
   return request(backendBaseUrl, '/flows/system/status');
 }
 
+export function getLogs({ source = 'docker', container = '', tail = 200 } = {}) {
+  const params = new URLSearchParams();
+  params.set('source', source);
+  params.set('tail', String(tail));
+  if (container) {
+    params.set('container', container);
+  }
+
+  return request(backendBaseUrl, `/api/logs?${params.toString()}`);
+}
+
 export function analyzeCsvFile(file) {
   const formData = new FormData();
   formData.append('file', file);

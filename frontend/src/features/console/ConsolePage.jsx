@@ -5,6 +5,7 @@ import { Button } from '../../app/ui/Button';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { SectionHeader } from '../../app/ui/SectionHeader';
+import { LogsPanel } from './LogsPanel';
 
 export function ConsolePage() {
   const [services, setServices] = useState([]);
@@ -153,6 +154,8 @@ export function ConsolePage() {
           </div>
         </Card>
       </div>
+
+      <LogsPanel />
     </section>
   );
 }

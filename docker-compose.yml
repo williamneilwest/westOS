@@ -44,6 +44,7 @@ services:
       - ./data:/app/data
       - ./frontend/dist:/app/frontend/dist:ro
       - ./backend:/app
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - westos
 

@@ -9,6 +9,7 @@ from .documents import documents_bp
 from .work import work_bp
 from .kb import kb_bp
 from .kb_processed import kb_processed_bp
+from .logs import logs_bp
 
 
 def register_routes(app):
@@ -23,3 +24,4 @@ def register_routes(app):
     app.register_blueprint(documents_bp)
     app.register_blueprint(kb_bp)
     app.register_blueprint(kb_processed_bp)
+    app.register_blueprint(logs_bp)
