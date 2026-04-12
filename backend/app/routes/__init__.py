@@ -13,6 +13,7 @@ from .logs import logs_bp
 from .assistant import assistant_bp
 from .services import services_bp
 from .data_tools import data_tools_bp
+from .auth import auth_bp
 
 
 def register_routes(app):
@@ -31,3 +32,4 @@ def register_routes(app):
     app.register_blueprint(assistant_bp)
     app.register_blueprint(services_bp)
     app.register_blueprint(data_tools_bp)
+    app.register_blueprint(auth_bp)

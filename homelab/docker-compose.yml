@@ -53,8 +53,12 @@ services:
     container_name: homelab-grafana
     restart: unless-stopped
     user: "0:0"
+    environment:
+      - GF_INSTALL_PLUGINS=marcusolsson-json-datasource
+      - GF_SECURITY_ALLOW_EMBEDDING=true
     volumes:
       - ./observability/grafana:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
     networks:
       - westos
 

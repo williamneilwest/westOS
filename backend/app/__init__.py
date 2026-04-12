@@ -2,7 +2,7 @@ import os
 import atexit
 from pathlib import Path
 
-from flask import Flask, request, send_from_directory
+from flask import Flask, request, send_from_directory, session
 from dotenv import load_dotenv
 
 from .routes.email_upload import email_upload_bp
@@ -33,6 +33,7 @@ WORK_ALLOWED_PREFIXES = (
     '/api/email/upload',
     '/api/files',
 )
+PUBLIC_AUTH_PATH_PREFIX = '/api/auth/'
 
 
 def _resolve_frontend_build_dir():
@@ -83,6 +84,11 @@ def create_app():
         FRONTEND_BUILD_DIR=str(frontend_build_dir) if frontend_build_dir else '',
         ENABLE_LOG_MONITOR=os.getenv('ENABLE_LOG_MONITOR', 'true').lower() == 'true',
         WORK_DOMAIN=os.getenv('WORK_DOMAIN', 'work.westos.dev').strip().lower(),
+        SECRET_KEY=os.getenv('AUTH_SESSION_SECRET', os.getenv('SECRET_KEY', 'westos-session-secret')),
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE='Lax',
+        SESSION_COOKIE_SECURE=os.getenv('FLASK_ENV', 'production').lower() != 'development',
+        PERMANENT_SESSION_LIFETIME=60 * 60 * 12,
     )
 
     register_routes(app)
@@ -107,6 +113,21 @@ def create_app():
             return None
 
         return ('Not Found', 404)
+
+    @app.before_request
+    def enforce_non_work_authentication():
+        host = (request.host or '').split(':', 1)[0].lower()
+        if host == app.config.get('WORK_DOMAIN', 'work.westos.dev'):
+            return None
+
+        request_path = (request.path or '/').rstrip('/') or '/'
+        if request_path == '/health' or request_path.startswith(PUBLIC_AUTH_PATH_PREFIX):
+            return None
+
+        if session.get('authenticated'):
+            return None
+
+        return ('Unauthorized', 401)
 
     if app.config.get('ENABLE_LOG_MONITOR', True):
         get_log_monitor(app)

@@ -16,15 +16,18 @@ function handleUnauthorizedResponse(response) {
     return;
   }
 
-  if (window.location.pathname === '/auth-required') {
+  if (window.location.pathname === '/login') {
     return;
   }
 
-  window.location.assign('/auth-required');
+  window.location.assign('/login');
 }
 
 async function request(baseUrl, path, options = {}) {
-  const response = await fetch(`${baseUrl}${path}`, options);
+  const response = await fetch(`${baseUrl}${path}`, {
+    credentials: 'include',
+    ...options,
+  });
 
   if (!response.ok) {
     handleUnauthorizedResponse(response);
@@ -44,7 +47,10 @@ async function request(baseUrl, path, options = {}) {
 }
 
 async function requestText(baseUrl, path, options = {}) {
-  const response = await fetch(`${baseUrl}${path}`, options);
+  const response = await fetch(`${baseUrl}${path}`, {
+    credentials: 'include',
+    ...options,
+  });
 
   if (!response.ok) {
     handleUnauthorizedResponse(response);

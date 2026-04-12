@@ -22,10 +22,6 @@ work.westos.dev {
 
 westos.dev {
 	route {
-		basic_auth {
-			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-		}
-
 		handle /api/* {
 			reverse_proxy backend:5000
 		}
@@ -50,72 +46,48 @@ westos.dev {
 
 grafana.westos.dev {
 	route {
-		basic_auth {
-			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-		}
 		reverse_proxy grafana:3000
 	}
 }
 
 code.westos.dev {
 	route {
-		basic_auth {
-			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-		}
 		reverse_proxy code-server:8080
 	}
 }
 
 portainer.westos.dev {
 	route {
-		basic_auth {
-			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-		}
 		reverse_proxy portainer:9000
 	}
 }
 
 files.westos.dev {
 	route {
-		basic_auth {
-			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-		}
 		reverse_proxy filebrowser:80
 	}
 }
 
 webui.westos.dev {
 	route {
-		basic_auth {
-			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-		}
 		reverse_proxy open-webui:8080
 	}
 }
 
 plex.westos.dev {
 	route {
-		basic_auth {
-			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-		}
 		reverse_proxy homelab-plex:32400
 	}
 }
 
 torrent.westos.dev {
 	route {
-		basic_auth {
-			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-		}
 		reverse_proxy homelab-qbittorrent:8080
 	}
 }
 
 *.westos.dev {
 	route {
-		basic_auth {
-			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-		}
 		respond "Not Found" 404
 	}
 }

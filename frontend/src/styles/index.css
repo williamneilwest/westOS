@@ -5477,6 +5477,13 @@ textarea {
   font-size: 0.9rem;
 }
 
+.system-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .system-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -5725,6 +5732,21 @@ textarea {
 
 .system-health__row--fail {
   border-color: rgba(251, 113, 133, 0.42);
+}
+
+.system-grafana-preview {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.8rem;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+  min-height: 280px;
+}
+
+.system-grafana-preview iframe {
+  width: 100%;
+  min-height: 280px;
+  border: 0;
+  display: block;
 }
 
 @media (max-width: 720px) {
