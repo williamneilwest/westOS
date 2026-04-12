@@ -1,0 +1,63 @@
+services:
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: homelab-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./observability/loki:/tmp/loki
+    networks:
+      - westos
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: homelab-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail.yaml
+    volumes:
+      - ./observability/promtail/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - ./observability/promtail:/tmp
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - westos
+
+  prometheus:
+    image: prom/prometheus:v2.53.1
+    container_name: homelab-prometheus
+    restart: unless-stopped
+    user: "0:0"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus:/prometheus
+    networks:
+      - westos
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: homelab-cadvisor
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    networks:
+      - westos
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: homelab-grafana
+    restart: unless-stopped
+    user: "0:0"
+    volumes:
+      - ./observability/grafana:/var/lib/grafana
+    networks:
+      - westos
+
+networks:
+  westos:
+    external: true
