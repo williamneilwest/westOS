@@ -13,8 +13,9 @@ export function TicketCard({ ticket, columns, matchedRules = [], onOpen, navigat
   const ticketId = getTicketId(ticket, columns);
   const hasAiAnalysis = Boolean(ticket?.ai_analysis?.result);
   const canOpenTicketRoute = ticketId && ticketId !== 'Untitled ticket';
-  const primaryRule = matchedRules[0] || null;
-  const suggestionTooltip = matchedRules.map((rule) => rule.suggestion).join('\n');
+  const safeRules = (matchedRules || []).filter((rule) => rule && typeof rule === 'object');
+  const primaryRule = safeRules[0] || null;
+  const suggestionTooltip = safeRules.map((rule) => String(rule?.suggestion || '')).filter(Boolean).join('\n');
   const cardClassName = ['ticket-card', primaryRule?.highlightClass].filter(Boolean).join(' ');
   const content = (
     <>
@@ -30,14 +31,14 @@ export function TicketCard({ ticket, columns, matchedRules = [], onOpen, navigat
             AI cached
           </span>
         ) : null}
-        {matchedRules.length ? (
+        {safeRules.length ? (
           <span
             className="ticket-card__rule-chip"
             data-tooltip={suggestionTooltip}
             title={suggestionTooltip}
           >
             <Lightbulb size={14} />
-            {matchedRules.length === 1 ? 'Suggestion' : `${matchedRules.length} suggestions`}
+            {safeRules.length === 1 ? 'Suggestion' : `${safeRules.length} suggestions`}
           </span>
         ) : null}
       </div>
@@ -61,11 +62,11 @@ export function TicketCard({ ticket, columns, matchedRules = [], onOpen, navigat
         </span>
       </div>
 
-      {matchedRules.length ? (
+      {safeRules.length ? (
         <div className="ticket-card__suggestions">
-          {matchedRules.map((rule) => (
-            <p className="ticket-card__suggestion" key={rule.id}>
-              {rule.suggestion}
+          {safeRules.map((rule, index) => (
+            <p className="ticket-card__suggestion" key={rule.id || `rule-${index}`}>
+              {rule?.suggestion || 'Suggestion available'}
             </p>
           ))}
         </div>

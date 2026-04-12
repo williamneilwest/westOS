@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useState } from 'react';
 import { TableProperties } from 'lucide-react';
 import { EmptyState } from '../../../app/ui/EmptyState';
 import { TABLE_PAGE_SIZE, formatColumnLabel, getCellText } from '../tableUtils';
@@ -17,33 +17,9 @@ export const DataTable = memo(function DataTable({
   onRowSelect,
   selectedRow,
 }) {
-  const [viewMode, setViewMode] = useState(() => {
-    if (typeof window === 'undefined') {
-      return 'table';
-    }
-    return window.matchMedia('(max-width: 768px)').matches ? 'cards' : 'table';
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return undefined;
-    }
-
-    const mediaQuery = window.matchMedia('(max-width: 768px)');
-    const onMediaChange = (event) => {
-      if (event.matches) {
-        setViewMode((current) => (current === 'table' ? 'cards' : current));
-      }
-    };
-
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', onMediaChange);
-      return () => mediaQuery.removeEventListener('change', onMediaChange);
-    }
-
-    mediaQuery.addListener(onMediaChange);
-    return () => mediaQuery.removeListener(onMediaChange);
-  }, []);
+  const [viewMode, setViewMode] = useState(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('is-mobile') ? 'cards' : 'table'
+  );
 
   if (!visibleColumns.length) {
     return (

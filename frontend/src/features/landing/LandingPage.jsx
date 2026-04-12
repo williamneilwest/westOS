@@ -1,27 +1,63 @@
-import { ArrowRight, Blocks, BrainCircuit, HeartPulse, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Blocks, BrainCircuit, BookText, HeartPulse, TerminalSquare, BriefcaseBusiness } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { modules } from '../../app/shell/modules';
 
-const entrypoints = [
+const primaryAction = {
+  href: '/app',
+  label: 'Enter System'
+};
+
+const secondaryActions = [
+  { href: '/csv', label: 'CSV Tools' },
+  { href: '/app/ai', label: 'AI Workspace' },
+  { href: '/app/work', label: 'Work Console' }
+];
+
+const systemModules = [
   {
     href: '/app/life',
     title: 'LifeOS',
-    description: 'Focused operational space for personal systems and recurring loops.',
+    description: 'Personal systems, routines, and private operating loops.',
     icon: HeartPulse
+  },
+  {
+    href: '/app/work',
+    title: 'Work Console',
+    description: 'Operational workflows, datasets, and ticket-driven tools.',
+    icon: BriefcaseBusiness
   },
   {
     href: '/csv',
     title: 'CSV Tools',
-    description: 'Turn exported operational files into a fast summary instead of a manual review.',
+    description: 'CSV intake, review, and structured analysis pipelines.',
     icon: Blocks
   },
   {
-    href: 'https://webui.westos.dev',
-    title: 'AI Workspace',
-    description: 'Open WebUI runs on its own host while the gateway stays behind the app API boundary.',
-    icon: BrainCircuit,
-    external: true
+    href: '/app/ai',
+    title: 'AI Control',
+    description: 'Model access, AI runs, and interaction monitoring.',
+    icon: BrainCircuit
+  },
+  {
+    href: '/app/kb',
+    title: 'Knowledge Base',
+    description: 'Stored references, documents, and indexed context.',
+    icon: BookText
+  },
+  {
+    href: '/app/console',
+    title: 'Logs',
+    description: 'System health, runtime visibility, and service logs.',
+    icon: TerminalSquare
   }
+];
+
+const systemStatus = [
+  'Unified domain routing (westos.dev)',
+  'AI gateway active',
+  'CSV + email ingestion enabled',
+  'Live AI analysis + token tracking',
+  'Hybrid AI (local + external)'
 ];
 
 export function LandingPage() {
@@ -36,7 +72,6 @@ export function LandingPage() {
 
   return (
     <section className="landing">
-      {/* Mobile-only compact top bar with dropdown navigation (shown on all pages) */}
       <div className="shell__mobile-topbar" role="navigation" aria-label="Mobile page selector">
         <select
           className="shell__mobile-select"
@@ -57,58 +92,69 @@ export function LandingPage() {
         </select>
       </div>
 
-      <div className="landing__hero">
-        <span className="shell__eyebrow">westos.dev</span>
-        <h1>WestOS</h1>
-        <p>
-          One control surface for the homelab stack. The frontend, backend, and AI gateway stay behind a single
-          domain with clean path-based routing!!
-        </p>
+      <header className="ui-card landing__hero landing__panel">
+        <div className="landing__hero-copy">
+          <span className="shell__eyebrow">Public surface</span>
+          <span className="landing__access">Access level: Public (temporary)</span>
+          <h1>WESTOS.DEV</h1>
+          <p>
+            What you&rsquo;re about to access is not a typical app.
+            <br />
+            <br />
+            This is a live control surface for systems, data, and AI-assisted workflows.
+            <br />
+            Some tools are personal. Some are experimental. All of them do something real.
+          </p>
+        </div>
 
         <div className="landing__actions">
-          <Link className="ui-button ui-button--primary" to="/app/life">
-            Open App
+          <Link className="ui-button ui-button--primary" to={primaryAction.href}>
+            {primaryAction.label}
             <ArrowRight size={15} />
           </Link>
-          <Link className="ui-button ui-button--secondary" to="/csv">
-            Open CSV Tools
-          </Link>
-        </div>
-      </div>
-
-      <div className="landing__grid">
-        {entrypoints.map((entrypoint) =>
-          entrypoint.external ? (
-            <a className="ui-card landing__card" href={entrypoint.href} key={entrypoint.href} rel="noreferrer">
-              <div className="icon-badge">
-                <entrypoint.icon size={18} />
-              </div>
-              <h2>{entrypoint.title}</h2>
-              <p>{entrypoint.description}</p>
-            </a>
-          ) : (
-            <Link className="ui-card landing__card" key={entrypoint.href} to={entrypoint.href}>
-              <div className="icon-badge">
-                <entrypoint.icon size={18} />
-              </div>
-              <h2>{entrypoint.title}</h2>
-              <p>{entrypoint.description}</p>
+          {secondaryActions.map((action) => (
+            <Link className="ui-button ui-button--secondary" key={action.href} to={action.href}>
+              {action.label}
             </Link>
-          )
-        )}
-      </div>
-
-      <div className="ui-card landing__footer">
-        <div className="signal-panel__item">
-          <span className="icon-badge">
-            <ShieldCheck size={16} />
-          </span>
-          <div>
-            <strong>Single-domain development</strong>
-            <p>All browser traffic resolves through `westos.dev`, which keeps TLS and CORS simple during iteration.</p>
-          </div>
+          ))}
         </div>
-      </div>
+      </header>
+
+      <section className="landing__section">
+        <div className="landing__section-header">
+          <span className="shell__eyebrow">Modules</span>
+          <h2>System Modules</h2>
+        </div>
+
+        <div className="landing__module-grid">
+          {systemModules.map((module) => (
+            <Link className="ui-card landing__module-card" key={module.href} to={module.href}>
+              <div className="landing__module-top">
+                <span className="icon-badge landing__module-icon">
+                  <module.icon size={18} />
+                </span>
+                <ArrowRight size={15} />
+              </div>
+              <div className="landing__module-copy">
+                <h3>{module.title}</h3>
+                <p>{module.description}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="ui-card landing__status-panel landing__panel">
+        <div className="landing__section-header landing__section-header--compact">
+          <span className="shell__eyebrow">Runtime</span>
+          <h2>System Status</h2>
+        </div>
+        <ul className="landing__status-list">
+          {systemStatus.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </section>
     </section>
   );
 }

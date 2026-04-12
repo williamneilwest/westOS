@@ -23,10 +23,10 @@ export function LogsPanel({ requestedContainer = '', autoOpen = false }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(() => {
-    if (typeof window === 'undefined') {
+    if (typeof document === 'undefined') {
       return true;
     }
-    return !window.matchMedia('(max-width: 720px)').matches;
+    return !document.documentElement.classList.contains('is-mobile');
   });
   const logBoxRef = useRef(null);
 
@@ -121,24 +121,6 @@ export function LogsPanel({ requestedContainer = '', autoOpen = false }) {
       logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
     }
   }, [logs]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return undefined;
-    }
-    const mediaQuery = window.matchMedia('(max-width: 720px)');
-    const onChange = (event) => {
-      setControlsOpen(!event.matches);
-    };
-
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', onChange);
-      return () => mediaQuery.removeEventListener('change', onChange);
-    }
-
-    mediaQuery.addListener(onChange);
-    return () => mediaQuery.removeListener(onChange);
-  }, []);
 
   async function copyLogs() {
     if (!logs) {

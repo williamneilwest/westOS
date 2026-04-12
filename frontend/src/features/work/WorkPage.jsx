@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
   Clock3,
@@ -25,7 +25,9 @@ import { formatDataFileName } from '../../app/utils/fileDisplay';
 import { storage } from '../../app/utils/storage';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
+import { ErrorBoundary } from '../../app/ui/ErrorBoundary';
 import { getStoredVisibleColumns, setStoredVisibleColumns } from '../tables/tableUtils';
+import { DataTable } from '../tables/components/DataTable';
 import { TicketCard } from './components/TicketCard';
 import { getCachedWorkDataset, parseCsvText, setCachedWorkDataset } from './workDatasetCache';
 import { dedupeNotes, getTicketAssignee, getTicketColumns, getTicketId, isSuppressedTicketColumn } from './utils/aiAnalysis';
@@ -425,106 +427,6 @@ function matchesColumnFilter(value, columnType, filter = {}) {
   return !filter.text || cellText.toLowerCase().includes(filter.text.trim().toLowerCase());
 }
 
-const DataTable = memo(function DataTable({
-  rows,
-  visibleColumns,
-  columnTypeMap,
-  globalSearch,
-  page,
-  sortConfig,
-  onGlobalSearchChange,
-  onNextPage,
-  onPreviousPage,
-  onSort,
-  fileName,
-  onRowSelect,
-  selectedRow,
-}) {
-  if (!visibleColumns.length) {
-    return (
-      <EmptyState
-        description="Select at least one column to render the preview table."
-        icon={<TableProperties size={20} />}
-        title="No visible columns"
-      />
-    );
-  }
-
-  return (
-    <div className="data-table-wrap">
-      <div className="data-table__toolbar">
-        <input
-          aria-label="Search table"
-          className="data-table__search"
-          onChange={(event) => onGlobalSearchChange(event.target.value)}
-          placeholder="Search all visible columns..."
-          type="text"
-          value={globalSearch}
-        />
-      </div>
-      <table className="data-table">
-        <thead>
-          <tr>
-            {visibleColumns.map((column) => {
-              const isSorted = sortConfig.column === column;
-
-              return (
-                <th key={column}>
-                  <button className="data-table__sort" onClick={() => onSort(column)} type="button">
-                    <span>{formatColumnLabel(column)}</span>
-                    <span aria-hidden="true">{isSorted ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
-                  </button>
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length ? (
-            rows.map((row, rowIndex) => (
-              <tr
-                className={selectedRow === row ? 'data-table__row data-table__row--selected' : 'data-table__row'}
-                key={`${fileName}-${rowIndex}`}
-                onClick={() => onRowSelect(row)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onRowSelect(row);
-                  }
-                }}
-                tabIndex={0}
-              >
-                {visibleColumns.map((column) => {
-                  return <td key={`${rowIndex}-${column}`}>{getCellText(row, column) || '—'}</td>;
-                })}
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td className="data-table__empty" colSpan={visibleColumns.length}>
-                No preview rows match the current filters.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      <div className="data-table__pagination">
-        <span>
-          Page {page + 1}
-        </span>
-        <div className="data-table__pagination-actions">
-          <button className="compact-toggle" disabled={page === 0} onClick={onPreviousPage} type="button">
-            Previous
-          </button>
-          <button className="compact-toggle" disabled={rows.length < TABLE_PAGE_SIZE} onClick={onNextPage} type="button">
-            Next
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-});
-
 export function WorkPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -902,6 +804,16 @@ export function WorkPage() {
       }),
     [assigneeFilter, datasetAssigneeColumn, datasetColumns, latestDataset.rows]
   );
+  const normalizedTickets = useMemo(
+    () =>
+      (datasetRows || []).map((ticket) => ({
+        ...(ticket || {}),
+        notes: Array.isArray(ticket?.notes) ? ticket.notes : [],
+        comments: typeof ticket?.comments === 'string' ? ticket.comments : '',
+        work_notes: typeof ticket?.work_notes === 'string' ? ticket.work_notes : '',
+      })),
+    [datasetRows]
+  );
   const assigneeOptions = useMemo(() => {
     if (!datasetAssigneeColumn) {
       return [];
@@ -926,14 +838,14 @@ export function WorkPage() {
   }, [assigneeFilter, assigneeOptions]);
   const matchedDatasetTickets = useMemo(
     () =>
-      datasetRows.map((ticket) => ({
+      normalizedTickets.map((ticket) => ({
         ticket,
         matchedRules: matchTicketRules(
           buildTicketRuleText(ticket, datasetColumns, datasetDescriptionColumn),
           { kbTagWords }
         ),
       })),
-    [datasetColumns, datasetDescriptionColumn, datasetRows, kbTagWords]
+    [datasetColumns, datasetDescriptionColumn, normalizedTickets, kbTagWords]
   );
   const visibleTickets = useMemo(
     () =>
@@ -942,17 +854,21 @@ export function WorkPage() {
       ),
     [matchedDatasetTickets, showOnlyFlaggedTickets]
   );
+  const tableBaseRows = useMemo(
+    () => visibleTickets.map(({ ticket }) => ticket),
+    [visibleTickets]
+  );
   const datasetColumnTypeMap = useMemo(
-    () => Object.fromEntries(datasetVisibleColumns.map((column) => [column, inferColumnType(datasetRows, column)])),
-    [datasetRows, datasetVisibleColumns]
+    () => Object.fromEntries(datasetVisibleColumns.map((column) => [column, inferColumnType(tableBaseRows, column)])),
+    [tableBaseRows, datasetVisibleColumns]
   );
   const filteredDatasetRows = useMemo(() => {
-    if (!datasetRows.length) {
+    if (!tableBaseRows.length) {
       return [];
     }
 
     const searchQuery = datasetGlobalSearch.trim().toLowerCase();
-    const filteredRows = datasetRows.filter((row) => {
+    const filteredRows = tableBaseRows.filter((row) => {
       if (!searchQuery) {
         return true;
       }
@@ -971,22 +887,31 @@ export function WorkPage() {
       (leftRow, rightRow) =>
         compareValues(leftRow[datasetSortConfig.column], rightRow[datasetSortConfig.column], columnType) * sortDirection
     );
-  }, [datasetColumnTypeMap, datasetGlobalSearch, datasetSortConfig, datasetRows, datasetVisibleColumns]);
+  }, [datasetColumnTypeMap, datasetGlobalSearch, datasetSortConfig, tableBaseRows, datasetVisibleColumns]);
   const paginatedDatasetRows = useMemo(() => {
     const start = datasetPage * TABLE_PAGE_SIZE;
     return filteredDatasetRows.slice(start, start + TABLE_PAGE_SIZE);
   }, [datasetPage, filteredDatasetRows]);
+  const paginatedVisibleTickets = useMemo(() => {
+    const start = datasetPage * TABLE_PAGE_SIZE;
+    return visibleTickets.slice(start, start + TABLE_PAGE_SIZE);
+  }, [datasetPage, visibleTickets]);
 
   useEffect(() => {
     setDatasetPage(0);
   }, [datasetGlobalSearch, datasetSortConfig, latestFileName]);
 
   useEffect(() => {
-    const maxPage = Math.max(0, Math.ceil(filteredDatasetRows.length / TABLE_PAGE_SIZE) - 1);
+    const rowCount = ticketView === 'card' ? visibleTickets.length : filteredDatasetRows.length;
+    const maxPage = Math.max(0, Math.ceil(rowCount / TABLE_PAGE_SIZE) - 1);
     if (datasetPage > maxPage) {
       setDatasetPage(maxPage);
     }
-  }, [datasetPage, filteredDatasetRows.length]);
+  }, [datasetPage, filteredDatasetRows.length, ticketView, visibleTickets.length]);
+
+  useEffect(() => {
+    setDatasetPage(0);
+  }, [assigneeFilter, showOnlyFlaggedTickets, ticketView]);
 
   useEffect(() => {
     if (!datasetColumns.length) {
@@ -1432,16 +1357,9 @@ export function WorkPage() {
                       Cards
                     </button>
                     <button
-                      aria-pressed="false"
-                      className="compact-toggle"
-                      onClick={() =>
-                        navigate('/app/work/table', {
-                          state: {
-                            from: `${location.pathname}${location.search || ''}`,
-                            label: 'Active Tickets',
-                          },
-                        })
-                      }
+                      aria-pressed={ticketView === 'table'}
+                      className={ticketView === 'table' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                      onClick={() => setTicketView('table')}
                       type="button"
                     >
                       Table
@@ -1474,21 +1392,91 @@ export function WorkPage() {
 
               {latestDataset?.rows?.length ? (
                 visibleTickets.length ? (
-                  <div className="ticket-card-grid">
-                    {visibleTickets.map(({ ticket, matchedRules }, index) => (
-                      <TicketCard
-                        key={`${getTicketId(ticket, datasetColumns)}-${index}`}
-                        columns={datasetColumns}
-                        matchedRules={matchedRules}
-                        navigationState={{
-                          from: `${location.pathname}${location.search || ''}`,
-                          label: 'Active Tickets',
-                        }}
-                        onOpen={handlePreviewRowSelect}
-                        ticket={ticket}
-                      />
-                    ))}
-                  </div>
+                  ticketView === 'card' ? (
+                    <ErrorBoundary
+                      fallback={
+                        <EmptyState
+                          icon={<FileSpreadsheet size={20} />}
+                          title="Card view unavailable"
+                          description="A rendering issue occurred in ticket cards. Reload and check console logs for details."
+                        />
+                      }
+                    >
+                      <div className="ticket-card-grid">
+                        {paginatedVisibleTickets.map(({ ticket, matchedRules }, index) => {
+                          const stableCardKey =
+                            ticket?.id
+                            || ticket?.ticket_number
+                            || ticket?.number
+                            || ticket?.sys_id
+                            || getTicketId(ticket, datasetColumns)
+                            || `row-${index}`;
+
+                          return (
+                            <TicketCard
+                              key={stableCardKey}
+                              columns={datasetColumns}
+                              matchedRules={matchedRules || []}
+                              navigationState={{
+                                from: `${location.pathname}${location.search || ''}`,
+                                label: 'Active Tickets',
+                              }}
+                              onOpen={handlePreviewRowSelect}
+                              ticket={ticket || {}}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div className="data-table__pagination">
+                        <span>Page {datasetPage + 1}</span>
+                        <div className="data-table__pagination-actions">
+                          <button
+                            className="compact-toggle"
+                            disabled={datasetPage === 0}
+                            onClick={() => setDatasetPage((current) => Math.max(0, current - 1))}
+                            type="button"
+                          >
+                            Previous
+                          </button>
+                          <button
+                            className="compact-toggle"
+                            disabled={(datasetPage + 1) * TABLE_PAGE_SIZE >= visibleTickets.length}
+                            onClick={() => setDatasetPage((current) => current + 1)}
+                            type="button"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    </ErrorBoundary>
+                  ) : (
+                    <DataTable
+                      fileName={latestFileName || 'active-tickets'}
+                      globalSearch={datasetGlobalSearch}
+                      onGlobalSearchChange={setDatasetGlobalSearch}
+                      onNextPage={() => setDatasetPage((current) => current + 1)}
+                      onPreviousPage={() => setDatasetPage((current) => Math.max(0, current - 1))}
+                      onRowSelect={handlePreviewRowSelect}
+                      onSort={(column) =>
+                        setDatasetSortConfig((current) => {
+                          if (current.column !== column) {
+                            return { column, direction: 'asc' };
+                          }
+
+                          if (current.direction === 'asc') {
+                            return { column, direction: 'desc' };
+                          }
+
+                          return { column: '', direction: 'asc' };
+                        })
+                      }
+                      page={datasetPage}
+                      rows={paginatedDatasetRows}
+                      selectedRow={selectedRow}
+                      sortConfig={datasetSortConfig}
+                      visibleColumns={datasetVisibleColumns}
+                    />
+                  )
                 ) : (
         <EmptyState
           icon={<FileSpreadsheet size={20} />}
@@ -1569,12 +1557,12 @@ export function WorkPage() {
                     <div className="row-notes-panel__header">
                       <h4>Comments and Notes</h4>
                     </div>
-                    {rowDetail.notes.length ? (
+                    {rowDetail.notes?.length ? (
                       <div className="row-notes-timeline">
-                        {rowDetail.notes.map((note) => (
-                          <article className="row-note" key={note.id}>
-                            <span>{note.label}</span>
-                            <p>{note.value}</p>
+                        {(rowDetail.notes || []).map((note, index) => (
+                          <article className="row-note" key={note?.id || `note-${index}`}>
+                            <span>{note?.label || 'Note'}</span>
+                            <p>{note?.value || ''}</p>
                           </article>
                         ))}
                       </div>

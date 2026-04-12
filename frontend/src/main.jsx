@@ -7,6 +7,18 @@ import './styles/global.css';
 import './styles/index.css';
 
 if (typeof window !== 'undefined') {
+  const MOBILE_BREAKPOINT = 768;
+  const applyViewportClass = () => {
+    const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
+    document.documentElement.classList.toggle('is-mobile', isMobile);
+    document.documentElement.classList.toggle('is-desktop', !isMobile);
+    document.body.classList.toggle('is-mobile', isMobile);
+    document.body.classList.toggle('is-desktop', !isMobile);
+  };
+
+  applyViewportClass();
+  window.addEventListener('resize', applyViewportClass, { passive: true });
+
   window.westosDebug = {
     clearStorage: () => storage.clearAll(),
     clearWorkData: () => storage.clearNamespace('westos.work'),

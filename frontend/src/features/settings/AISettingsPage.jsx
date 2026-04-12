@@ -1,4 +1,4 @@
-import { Bot, BrainCircuit, Cpu, ExternalLink, Save, SlidersHorizontal } from 'lucide-react';
+import { ExternalLink, Save, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { getAISettings, updateAISettings } from '../../app/services/api';
 import { Card, CardHeader } from '../../app/ui/Card';
@@ -163,111 +163,95 @@ export function AISettingsPage() {
         tag="/app/ai"
         title="AI"
         description="Configure stage-specific AI models and tune the analysis pipeline."
+        actions={(
+          <a className="compact-toggle" href="https://webui.westos.dev" rel="noreferrer" target="_blank">
+            <ExternalLink size={14} />
+            Open WebUI
+          </a>
+        )}
       />
 
       {error ? <p className="status-text status-text--error">{error}</p> : null}
       {successMessage ? <p className="status-text">{successMessage}</p> : null}
 
       <div className="ai-pipeline">
-        <div className="ai-pipeline__flow">
-          <span>Models</span>
-          <small>→</small>
-          <span>Dataset Limits</span>
-          <small>→</small>
-          <span>Apply</span>
-        </div>
-
         <div className="ai-pipeline__layout">
           <div className="ai-pipeline__main">
-            <Card className="landing__card">
+            <Card className="landing__card ai-config-card">
               <CardHeader
-                eyebrow="Model Configuration"
-                title="Analysis Models"
-                description={`Provider: ${settings.provider || 'unknown'}. These models control each stage of the analysis pipeline.`}
+                eyebrow="Pipeline"
+                title="AI Pipeline Configuration"
+                description={`Provider: ${settings.provider || 'unknown'}. Configure stage models and processing rules.`}
               />
-              <div className="ai-settings-grid">
-                <ModelSelect
-                  changed={form.models.preview !== baseForm.models.preview}
-                  id="preview-model"
-                  label="Preview Model"
-                  onChange={(value) => updateModel('preview', value)}
-                  options={settings.availableModels || []}
-                  value={form.models.preview}
-                />
-                <ModelSelect
-                  changed={form.models.focused !== baseForm.models.focused}
-                  id="focused-model"
-                  label="Focused Model"
-                  onChange={(value) => updateModel('focused', value)}
-                  options={settings.availableModels || []}
-                  value={form.models.focused}
-                />
-                <ModelSelect
-                  changed={form.models.deep !== baseForm.models.deep}
-                  id="deep-model"
-                  label="Deep Model"
-                  onChange={(value) => updateModel('deep', value)}
-                  options={settings.availableModels || []}
-                  value={form.models.deep}
-                />
-                <ModelSelect
-                  changed={form.models.document_processing !== baseForm.models.document_processing}
-                  id="document-processing-model"
-                  label="Document Processing Model"
-                  onChange={(value) => updateModel('document_processing', value)}
-                  options={settings.availableModels || []}
-                  value={form.models.document_processing}
-                />
-              </div>
-            </Card>
 
-            <Card className="landing__card">
-              <CardHeader
-                eyebrow="Pipeline Controls"
-                title="Dataset & Processing Limits"
-                description="Limits control how much data is processed before AI is invoked."
-              />
-              <div className="ai-limits-row">
-                <NumericInput
-                  changed={form.pipeline.preview_max_rows !== baseForm.pipeline.preview_max_rows}
-                  id="preview-max-rows"
-                  label="Preview max rows"
-                  onChange={(value) => updatePipeline('preview_max_rows', value)}
-                  value={form.pipeline.preview_max_rows}
-                />
-                <NumericInput
-                  changed={form.pipeline.focused_max_rows !== baseForm.pipeline.focused_max_rows}
-                  id="focused-max-rows"
-                  label="Focused max rows"
-                  onChange={(value) => updatePipeline('focused_max_rows', value)}
-                  value={form.pipeline.focused_max_rows}
-                />
-                <label
-                  className={`column-filter__label ai-settings__toggle${form.pipeline.enable_chunking !== baseForm.pipeline.enable_chunking ? ' ai-field--changed' : ''}`}
-                  htmlFor="enable-chunking"
-                >
-                  <span>Enable chunking</span>
-                  <input
-                    checked={form.pipeline.enable_chunking}
-                    id="enable-chunking"
-                    onChange={(event) => updatePipeline('enable_chunking', event.target.checked)}
-                    type="checkbox"
+              <div className="ai-config-section">
+                <h4>Stage Models</h4>
+                <div className="ai-settings-grid">
+                  <ModelSelect
+                    changed={form.models.preview !== baseForm.models.preview}
+                    id="preview-model"
+                    label="Preview Model"
+                    onChange={(value) => updateModel('preview', value)}
+                    options={settings.availableModels || []}
+                    value={form.models.preview}
                   />
-                </label>
+                  <ModelSelect
+                    changed={form.models.focused !== baseForm.models.focused}
+                    id="focused-model"
+                    label="Focused Model"
+                    onChange={(value) => updateModel('focused', value)}
+                    options={settings.availableModels || []}
+                    value={form.models.focused}
+                  />
+                  <ModelSelect
+                    changed={form.models.deep !== baseForm.models.deep}
+                    id="deep-model"
+                    label="Deep Model"
+                    onChange={(value) => updateModel('deep', value)}
+                    options={settings.availableModels || []}
+                    value={form.models.deep}
+                  />
+                  <ModelSelect
+                    changed={form.models.document_processing !== baseForm.models.document_processing}
+                    id="document-processing-model"
+                    label="Document Processing Model"
+                    onChange={(value) => updateModel('document_processing', value)}
+                    options={settings.availableModels || []}
+                    value={form.models.document_processing}
+                  />
+                </div>
               </div>
-            </Card>
 
-            <Card className="landing__card ai-utility-card">
-              <CardHeader
-                eyebrow="Utility"
-                title="Open WebUI"
-                description="Optional external AI workspace."
-              />
-              <div className="landing__actions">
-                <a className="ui-button ui-button--secondary" href="https://webui.westos.dev" rel="noreferrer">
-                  <ExternalLink size={16} />
-                  Open WebUI
-                </a>
+              <div className="ai-config-section">
+                <h4>Processing Rules</h4>
+                <div className="ai-settings-grid">
+                  <NumericInput
+                    changed={form.pipeline.preview_max_rows !== baseForm.pipeline.preview_max_rows}
+                    id="preview-max-rows"
+                    label="Preview max rows"
+                    onChange={(value) => updatePipeline('preview_max_rows', value)}
+                    value={form.pipeline.preview_max_rows}
+                  />
+                  <NumericInput
+                    changed={form.pipeline.focused_max_rows !== baseForm.pipeline.focused_max_rows}
+                    id="focused-max-rows"
+                    label="Focused max rows"
+                    onChange={(value) => updatePipeline('focused_max_rows', value)}
+                    value={form.pipeline.focused_max_rows}
+                  />
+                  <label
+                    className={`column-filter__label ai-settings__toggle${form.pipeline.enable_chunking !== baseForm.pipeline.enable_chunking ? ' ai-field--changed' : ''}`}
+                    htmlFor="enable-chunking"
+                  >
+                    <span>Enable chunking</span>
+                    <input
+                      checked={form.pipeline.enable_chunking}
+                      id="enable-chunking"
+                      onChange={(event) => updatePipeline('enable_chunking', event.target.checked)}
+                      type="checkbox"
+                    />
+                  </label>
+                </div>
               </div>
             </Card>
 
@@ -276,15 +260,11 @@ export function AISettingsPage() {
 
           <aside className="ai-pipeline__apply">
             <Card className="landing__card ai-apply-card">
-              <CardHeader
-                eyebrow="Apply"
-                title="Apply Configuration"
-                description={settings.note || 'Settings apply immediately to new requests.'}
-              />
+              <CardHeader eyebrow="Actions" title="Configuration Actions" description={settings.note || 'Settings apply immediately.'} />
               <div className="ai-apply-state">
                 <span className={`ai-state-pill${hasChanges ? ' ai-state-pill--warning' : ''}`}>{saveStateLabel}</span>
               </div>
-              <div className="landing__actions">
+              <div className="landing__actions ai-actions-row">
                 <button
                   className="ui-button ui-button--primary"
                   disabled={isSaving || !hasChanges}
@@ -303,32 +283,12 @@ export function AISettingsPage() {
                   Reset
                 </button>
               </div>
-              <div className="signal-panel__item">
-                <span className="icon-badge">
-                  <Bot size={16} />
-                </span>
-                <div>
-                  <strong>Preview</strong>
-                  <p>{form.models.preview || 'Not configured'}</p>
-                </div>
-              </div>
-              <div className="signal-panel__item">
-                <span className="icon-badge">
-                  <Cpu size={16} />
-                </span>
-                <div>
-                  <strong>Deep Analysis</strong>
-                  <p>{form.models.deep || 'Not configured'}</p>
-                </div>
-              </div>
-              <div className="signal-panel__item">
-                <span className="icon-badge">
-                  <BrainCircuit size={16} />
-                </span>
-                <div>
-                  <strong>Document Processing</strong>
-                  <p>{form.models.document_processing || 'Not configured'}</p>
-                </div>
+
+              <div className="ai-summary-chips">
+                <span className="chip ai-summary-chip">{`Preview: ${form.models.preview || 'Not configured'}`}</span>
+                <span className="chip ai-summary-chip">{`Focused: ${form.models.focused || 'Not configured'}`}</span>
+                <span className="chip ai-summary-chip">{`Deep: ${form.models.deep || 'Not configured'}`}</span>
+                <span className="chip ai-summary-chip">{`Docs: ${form.models.document_processing || 'Not configured'}`}</span>
               </div>
             </Card>
           </aside>
