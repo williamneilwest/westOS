@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Clock3, FileSpreadsheet, History, TableProperties, Upload, X } from 'lucide-react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, BarChart3, FileSpreadsheet, Upload, X } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getRecentCsvAnalyses, getRecentCsvAnalysisFile, getUploadFile, getUploads } from '../../app/services/api';
 import { useBackNavigation } from '../../app/hooks/useBackNavigation';
 import { formatDataFileName } from '../../app/utils/fileDisplay';
+import { storage } from '../../app/utils/storage';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
-import { DataTable } from './components/DataTable';
+import { DataTable } from '../../components/dataset/DataTable';
+import { DataCardList } from '../../components/dataset/DataCardList';
+import { DatasetPage } from '../../pages/dataset/DatasetPage';
 import {
   TABLE_PAGE_SIZE,
   compareValues,
-  formatColumnLabel,
   getCellText,
   getStoredVisibleColumns,
   inferColumnType,
@@ -20,6 +22,7 @@ import { getCachedWorkDataset, parseCsvText, setCachedWorkDataset } from '../wor
 import { dedupeNotes, getTicketColumns, getTicketId, isSuppressedTicketColumn } from '../work/utils/aiAnalysis';
 
 const DATASET_COLUMN_PREFERENCE_KEY = 'westos.work.datasetColumns';
+const DATASET_VIEW_STORAGE_KEY = 'westos.dataset.view';
 
 function getPrimaryColumns(columns = []) {
   const priorityPatterns = [
@@ -147,7 +150,13 @@ export function TablePage() {
     getStoredVisibleColumns(DATASET_COLUMN_PREFERENCE_KEY, initialDataset?.columns || [])
   );
   const [selectedRow, setSelectedRow] = useState(null);
-  const [isDatasetInfoOpen, setIsDatasetInfoOpen] = useState(false);
+  const [datasetView, setDatasetView] = useState(() => {
+    const stored = String(storage.get(DATASET_VIEW_STORAGE_KEY) || '').toLowerCase();
+    if (stored === 'cards' || stored === 'table' || stored === 'metrics') {
+      return stored;
+    }
+    return 'table';
+  });
   const [recentAnalyses, setRecentAnalyses] = useState([]);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isLoadingRecent, setIsLoadingRecent] = useState(true);
@@ -280,6 +289,10 @@ export function TablePage() {
     setStoredVisibleColumns(DATASET_COLUMN_PREFERENCE_KEY, visibleColumns);
   }, [visibleColumns]);
 
+  useEffect(() => {
+    storage.set(DATASET_VIEW_STORAGE_KEY, datasetView);
+  }, [datasetView]);
+
   const columnTypeMap = useMemo(
     () => Object.fromEntries(visibleColumns.map((column) => [column, inferColumnType(dataset.rows || [], column)])),
     [dataset.rows, visibleColumns]
@@ -316,6 +329,23 @@ export function TablePage() {
     const start = page * TABLE_PAGE_SIZE;
     return filteredRows.slice(start, start + TABLE_PAGE_SIZE);
   }, [filteredRows, page]);
+
+  const datasetState = useMemo(
+    () => ({
+      rawData: dataset.rows || [],
+      columns: dataset.columns || [],
+      visibleColumns,
+      metadata: {
+        rowCount: (dataset.rows || []).length,
+        columnCount: (dataset.columns || []).length,
+        inferredTypes: Object.fromEntries((dataset.columns || []).map((column) => [column, inferColumnType(dataset.rows || [], column)])),
+        categoryField: '',
+        fileName: formatDataFileName(dataset.fileName) || 'Unknown',
+      },
+      view: datasetView,
+    }),
+    [dataset.columns, dataset.fileName, dataset.rows, datasetView, visibleColumns]
+  );
 
   useEffect(() => {
     const maxPage = Math.max(0, Math.ceil(filteredRows.length / TABLE_PAGE_SIZE) - 1);
@@ -365,7 +395,6 @@ export function TablePage() {
     }
 
     setError('');
-    setIsDatasetInfoOpen(false);
     setIsHistoryExpanded(false);
     setIsUploadsExpanded(false);
 
@@ -391,7 +420,6 @@ export function TablePage() {
     }
 
     setError('');
-    setIsDatasetInfoOpen(false);
     setIsHistoryExpanded(false);
     setIsUploadsExpanded(false);
     setIsLoading(true);
@@ -421,7 +449,6 @@ export function TablePage() {
     }
 
     setError('');
-    setIsDatasetInfoOpen(false);
     setIsHistoryExpanded(false);
     setIsUploadsExpanded(false);
     setIsLoading(true);
@@ -448,220 +475,70 @@ export function TablePage() {
   return (
     <section className="module module--dataset-surface">
       {error ? <p className="status-text status-text--error">{error}</p> : null}
+      <input
+        ref={fileInputRef}
+        accept=".csv,text/csv"
+        className="ticket-toolbar__file-input"
+        onChange={(event) => void handleLocalFileSelection(event.target.files?.[0] || null)}
+        type="file"
+      />
 
-      {isDatasetInfoOpen ? (
-        <div className="dataset-panel-backdrop" onClick={() => setIsDatasetInfoOpen(false)} role="presentation">
-          <aside aria-label="Dataset information" className="dataset-panel" onClick={(event) => event.stopPropagation()}>
-            <div className="dataset-panel__header">
-              <div>
-                <span className="ui-eyebrow">Table</span>
-                <h3>Dataset panel</h3>
-                <p>Switch files and control which columns render in the shared table view.</p>
-              </div>
-              <button className="compact-toggle compact-toggle--icon" onClick={() => setIsDatasetInfoOpen(false)} type="button">
-                <X size={15} />
-              </button>
-            </div>
-
-            <div className="dataset-panel__section">
-              <div className="dataset-panel__section-header">
-                <h4>Change File</h4>
-                <p>Load a dataset from a new CSV, a recent analysis run, or an uploaded archive file.</p>
-              </div>
-
-              <div className="dataset-panel__action-grid">
-                <button className="compact-toggle dataset-panel__action" onClick={() => fileInputRef.current?.click()} type="button">
-                  <Upload size={15} />
-                  Upload New File
-                </button>
-                <button
-                  className="compact-toggle dataset-panel__action"
-                  onClick={() => {
-                    setIsHistoryExpanded((current) => !current);
-                    setIsUploadsExpanded(false);
-                  }}
-                  type="button"
-                >
-                  <History size={15} />
-                  Choose Recent Run
-                </button>
-                <button
-                  className="compact-toggle dataset-panel__action"
-                  onClick={() => {
-                    setIsUploadsExpanded((current) => !current);
-                    setIsHistoryExpanded(false);
-                  }}
-                  type="button"
-                >
-                  <FileSpreadsheet size={15} />
-                  Choose Upload
-                </button>
-              </div>
-            </div>
-
-            <div className="dataset-panel__section">
-              <p>Total rows: {dataset.rows?.length || 0}</p>
-              <p>Total columns: {dataset.columns?.length || 0}</p>
-            </div>
-
-            <div className="dataset-panel__section">
-              <div className="dataset-panel__section-header">
-                <h4>Data Columns</h4>
-              </div>
-              <div className="feature-list feature-list--compact">
-                {dataset.columns?.map((column) => (
-                  <label className="column-visibility-option dataset-panel__column-option" key={column}>
-                    <input
-                      checked={visibleColumns.includes(column)}
-                      onChange={() =>
-                        setVisibleColumns((current) =>
-                          current.includes(column) ? current.filter((item) => item !== column) : [...current, column]
-                        )
-                      }
-                      type="checkbox"
-                    />
-                    <span>
-                      <strong>{formatColumnLabel(column)}</strong> · {inferColumnType(dataset.rows || [], column)}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {isHistoryExpanded ? (
-              <div className="dataset-panel__section">
-                <div className="dataset-panel__section-header">
-                  <h4>Recent Runs</h4>
-                </div>
-                {recentAnalyses.length ? (
-                  <div className="stack-list">
-                    {recentAnalyses.map((entry) => (
-                      <button
-                        key={entry.id}
-                        className="stack-row stack-row--interactive"
-                        onClick={() => void handleRecentRunSelection(entry)}
-                        type="button"
-                      >
-                        <span className="stack-row__label">
-                          <History size={16} />
-                          <span>
-                            <strong>{formatDataFileName(entry.fileName)}</strong>
-                            <small>{new Date(entry.savedAt).toLocaleString()}</small>
-                          </span>
-                        </span>
-                        <strong>{entry.analysis.rowCount} rows</strong>
-                      </button>
-                    ))}
-                  </div>
-                ) : isLoadingRecent ? (
-                  <div className="skeleton-stack">
-                    <div className="skeleton-line" />
-                    <div className="skeleton-line" />
-                  </div>
-                ) : (
-                  <EmptyState
-                    icon={<Clock3 size={20} />}
-                    title="No saved analyses yet"
-                    description="Analyze a CSV once and recent datasets will appear here."
-                  />
-                )}
-              </div>
-            ) : null}
-
-            {isUploadsExpanded ? (
-              <div className="dataset-panel__section">
-                <div className="dataset-panel__section-header">
-                  <h4>Uploaded CSV Files</h4>
-                </div>
-                {uploadedFiles.filter((file) => file.filename.toLowerCase().endsWith('.csv')).length ? (
-                  <div className="stack-list">
-                    {uploadedFiles
-                      .filter((file) => file.filename.toLowerCase().endsWith('.csv'))
-                      .map((file) => (
-                        <button
-                          key={file.filename}
-                          className="stack-row stack-row--interactive"
-                          onClick={() => void handleUploadedFileSelection(file)}
-                          type="button"
-                        >
-                          <span className="stack-row__label">
-                            <Upload size={16} />
-                            <span>
-                              <strong>{formatDataFileName(file.filename)}</strong>
-                              <small>{file.url}</small>
-                            </span>
-                          </span>
-                        </button>
-                      ))}
-                  </div>
-                ) : isLoadingUploads ? (
-                  <div className="skeleton-stack">
-                    <div className="skeleton-line" />
-                    <div className="skeleton-line" />
-                  </div>
-                ) : (
-                  <EmptyState
-                    icon={<Upload size={20} />}
-                    title="No uploaded CSV files yet"
-                    description="Uploaded CSV files will appear here when available."
-                  />
-                )}
-              </div>
-            ) : null}
-          </aside>
-        </div>
-      ) : null}
-
-      <Card className="analysis-grid__wide">
-        <input
-          ref={fileInputRef}
-          accept=".csv,text/csv"
-          className="ticket-toolbar__file-input"
-          onChange={(event) => void handleLocalFileSelection(event.target.files?.[0] || null)}
-          type="file"
-        />
-        <CardHeader
-          eyebrow="Table"
-          title={formatDataFileName(dataset.fileName) || 'CSV table'}
-          description="A shared renderer for uploaded CSV datasets and cached work datasets."
-          action={
+      <DatasetPage
+        datasetState={datasetState}
+        onVisibleColumnsChange={setVisibleColumns}
+        onUploadClick={() => fileInputRef.current?.click()}
+        onToggleHistory={() => {
+          setIsHistoryExpanded((current) => !current);
+          setIsUploadsExpanded(false);
+        }}
+        onToggleUploads={() => {
+          setIsUploadsExpanded((current) => !current);
+          setIsHistoryExpanded(false);
+        }}
+        isHistoryExpanded={isHistoryExpanded}
+        isUploadsExpanded={isUploadsExpanded}
+        recentAnalyses={recentAnalyses}
+        isLoadingRecent={isLoadingRecent}
+        onRecentRunSelect={(entry) => void handleRecentRunSelection(entry)}
+        uploadedFiles={uploadedFiles.filter((file) => file.filename.toLowerCase().endsWith('.csv'))}
+        isLoadingUploads={isLoadingUploads}
+        onUploadSelect={(file) => void handleUploadedFileSelection(file)}
+        controls={(
+          <div className="ticket-toolbar ticket-toolbar--compact">
             <div className="ticket-toolbar__actions">
-              <button className="compact-toggle" onClick={() => setIsDatasetInfoOpen(true)} type="button">
-                <TableProperties size={15} />
-                Dataset Panel
-              </button>
+              <input
+                aria-label="Search dataset rows"
+                className="data-table__search"
+                onChange={(event) => setGlobalSearch(event.target.value)}
+                placeholder="Search visible columns..."
+                type="text"
+                value={globalSearch}
+              />
               <div className="ticket-view-toggle" role="tablist" aria-label="Dataset view">
                 <button
-                  aria-pressed="false"
-                  className="compact-toggle"
-                  onClick={() =>
-                    navigate('/app/work/active-tickets', {
-                      state: {
-                        from: `${location.pathname}${location.search || ''}`,
-                        label: 'Table Viewer',
-                      },
-                    })
-                  }
+                  aria-pressed={datasetView === 'cards'}
+                  className={datasetView === 'cards' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                  onClick={() => setDatasetView('cards')}
                   type="button"
                 >
                   Cards
                 </button>
-                <button aria-pressed="true" className="compact-toggle compact-toggle--active" type="button">
+                <button
+                  aria-pressed={datasetView === 'table'}
+                  className={datasetView === 'table' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                  onClick={() => setDatasetView('table')}
+                  type="button"
+                >
                   Table
                 </button>
                 <button
-                  className="compact-toggle"
-                  onClick={() =>
-                    navigate('/app/work/ai-metrics', {
-                      state: {
-                        from: `${location.pathname}${location.search || ''}`,
-                        label: 'Table Viewer',
-                      },
-                    })
-                  }
+                  aria-pressed={datasetView === 'metrics'}
+                  className={datasetView === 'metrics' ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                  onClick={() => setDatasetView('metrics')}
                   type="button"
                 >
-                  AI Metrics
+                  <BarChart3 size={14} />
+                  Metrics
                 </button>
               </div>
               <button className="compact-toggle" onClick={goBack} type="button">
@@ -669,39 +546,76 @@ export function TablePage() {
                 {`Back to ${backLabel}`}
               </button>
             </div>
-          }
-        />
-
-        <div className="ticket-source-banner ticket-source-banner--compact">
-          <span>{filteredRows.length} {filteredRows.length === 1 ? 'row' : 'rows'}</span>
-          <span>{visibleColumns.length} columns visible</span>
-        </div>
-
-        {isLoading ? (
-          <p className="status-text">Loading table data...</p>
-        ) : dataset.rows?.length ? (
-          <DataTable
-            fileName={dataset.fileName || 'table'}
-            globalSearch={globalSearch}
-            onGlobalSearchChange={setGlobalSearch}
-            onNextPage={() => setPage((current) => current + 1)}
-            onPreviousPage={() => setPage((current) => Math.max(0, current - 1))}
-            onRowSelect={handleRowSelect}
-            onSort={handleSort}
-            page={page}
-            rows={paginatedRows}
-            selectedRow={selectedRow}
-            sortConfig={sortConfig}
-            visibleColumns={visibleColumns}
-          />
-        ) : (
-          <EmptyState
-            icon={<FileSpreadsheet size={20} />}
-            title="No dataset loaded"
-            description="Open a CSV from Uploads or load a dataset in Work before opening the table page."
-          />
+          </div>
         )}
-      </Card>
+      >
+        <Card className="analysis-grid__wide">
+          <CardHeader
+            eyebrow="Dataset"
+            title={formatDataFileName(dataset.fileName) || 'Dataset table'}
+            description="Universal renderer for uploaded and cached datasets."
+          />
+
+          <div className="ticket-source-banner ticket-source-banner--compact">
+            <span>{filteredRows.length} {filteredRows.length === 1 ? 'row' : 'rows'}</span>
+            <span>{visibleColumns.length} columns visible</span>
+          </div>
+
+          {isLoading ? (
+            <p className="status-text">Loading table data...</p>
+          ) : dataset.rows?.length ? (
+            datasetView === 'cards' ? (
+              <DataCardList
+                rows={paginatedRows}
+                visibleColumns={visibleColumns}
+                onRowSelect={handleRowSelect}
+                rowKey={(row, index) => row?.id || row?.sys_id || getTicketId(row, dataset.columns || []) || `row-${index}`}
+                config={{
+                  primaryField: getPrimaryColumns(dataset.columns || [])[0] || '',
+                  secondaryField: getDescriptionColumn(dataset.columns || []),
+                  badgeField: getPrimaryColumns(dataset.columns || [])[2] || '',
+                }}
+              />
+            ) : datasetView === 'table' ? (
+              <DataTable
+                onRowSelect={handleRowSelect}
+                onSort={handleSort}
+                rows={paginatedRows}
+                selectedRow={selectedRow}
+                sortConfig={sortConfig}
+                visibleColumns={visibleColumns}
+              />
+            ) : (
+              <div className="dataset-metrics-grid">
+                <div className="metric-tile"><span>Rows in view</span><strong>{filteredRows.length}</strong></div>
+                <div className="metric-tile"><span>Total rows</span><strong>{(dataset.rows || []).length}</strong></div>
+                <div className="metric-tile"><span>Visible columns</span><strong>{visibleColumns.length}</strong></div>
+                <div className="metric-tile"><span>Current page</span><strong>{page + 1}</strong></div>
+              </div>
+            )
+          ) : (
+            <EmptyState
+              icon={<FileSpreadsheet size={20} />}
+              title="No dataset loaded"
+              description="Open a CSV from Uploads or load a dataset in Work before opening this view."
+            />
+          )}
+
+          {datasetView !== 'metrics' ? (
+            <div className="data-table__pagination">
+              <span>Page {page + 1}</span>
+              <div className="data-table__pagination-actions">
+                <button className="compact-toggle" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))} type="button">
+                  Previous
+                </button>
+                <button className="compact-toggle" disabled={(page + 1) * TABLE_PAGE_SIZE >= filteredRows.length} onClick={() => setPage((current) => current + 1)} type="button">
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </Card>
+      </DatasetPage>
 
       {rowDetail ? (
         <div className="row-detail-backdrop" onClick={() => setSelectedRow(null)} role="presentation">
