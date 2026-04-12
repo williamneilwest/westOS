@@ -1,5 +1,8 @@
-const STORAGE_KEY = 'westos.work.fullDataset';
-const SUMMARY_STORAGE_KEY = 'westos.work.aiMetricSummaries';
+import { STORAGE_KEYS, STORAGE_TTLS } from '../../app/constants/storageKeys';
+import { storage } from '../../app/utils/storage';
+
+const STORAGE_KEY = STORAGE_KEYS.FULL_DATASET;
+const SUMMARY_STORAGE_KEY = STORAGE_KEYS.AI_SUMMARIES;
 const HEADER_MAPPING = {
   u_task_1: 'Ticket',
 };
@@ -166,35 +169,14 @@ export function parseCsvText(text) {
   return { columns: headers, rows };
 }
 
-function canUseStorage() {
-  return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
-}
-
 function loadInitialCache() {
-  if (!canUseStorage()) {
-    return null;
-  }
-
-  try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  return storage.get(STORAGE_KEY, { session: true });
 }
 
 let cachedDataset = loadInitialCache();
 let cachedSummaries = (() => {
-  if (!canUseStorage()) {
-    return {};
-  }
-
-  try {
-    const raw = window.sessionStorage.getItem(SUMMARY_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+  const stored = storage.getWithTTL(SUMMARY_STORAGE_KEY, { session: true });
+  return stored && typeof stored === 'object' ? stored : {};
 })();
 
 export function getCachedWorkDataset() {
@@ -203,19 +185,10 @@ export function getCachedWorkDataset() {
 
 export function setCachedWorkDataset(payload) {
   cachedDataset = payload;
-
-  if (!canUseStorage()) {
-    return;
-  }
-
-  try {
-    if (payload) {
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } else {
-      window.sessionStorage.removeItem(STORAGE_KEY);
-    }
-  } catch {
-    // Ignore storage write failures.
+  if (payload) {
+    storage.set(STORAGE_KEY, payload, { session: true });
+  } else {
+    storage.remove(STORAGE_KEY, { session: true });
   }
 }
 
@@ -229,13 +202,5 @@ export function setCachedAiMetricSummary(cacheKey, summary) {
     [cacheKey]: summary,
   };
 
-  if (!canUseStorage()) {
-    return;
-  }
-
-  try {
-    window.sessionStorage.setItem(SUMMARY_STORAGE_KEY, JSON.stringify(cachedSummaries));
-  } catch {
-    // Ignore storage write failures.
-  }
+  storage.setWithTTL(SUMMARY_STORAGE_KEY, cachedSummaries, STORAGE_TTLS.AI_SUMMARIES, { session: true });
 }

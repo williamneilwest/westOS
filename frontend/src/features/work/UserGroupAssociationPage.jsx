@@ -6,12 +6,14 @@ import {
   getReferenceUsers,
   lookupReferenceGroupsFromFlow,
 } from '../../app/services/api';
+import { STORAGE_KEYS, STORAGE_TTLS } from '../../app/constants/storageKeys';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { SectionHeader } from '../../app/ui/SectionHeader';
+import { storage } from '../../app/utils/storage';
 
-const SEARCH_HISTORY_KEY = 'work.user-group-association.search-history';
-const CLICK_HISTORY_KEY = 'work.user-group-association.group-clicks';
+const SEARCH_HISTORY_KEY = STORAGE_KEYS.GROUP_SEARCH_HISTORY;
+const CLICK_HISTORY_KEY = STORAGE_KEYS.GROUP_CLICKS;
 const MAX_SEARCH_TERMS = 8;
 const MAX_CLICKED_GROUPS = 24;
 
@@ -20,25 +22,13 @@ function normalizeSearch(value) {
 }
 
 function readStoredObject(key) {
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) {
-      return {};
-    }
-
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+  const parsed = storage.getWithTTL(key);
+  return parsed && typeof parsed === 'object' ? parsed : {};
 }
 
 function writeStoredObject(key, value) {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Ignore storage failures and keep the page usable.
-  }
+  const ttlMs = key === SEARCH_HISTORY_KEY ? STORAGE_TTLS.GROUP_SEARCH_HISTORY : STORAGE_TTLS.GROUP_CLICKS;
+  storage.setWithTTL(key, value, ttlMs);
 }
 
 function rankEntries(record, limit) {

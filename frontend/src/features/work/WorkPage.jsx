@@ -18,7 +18,9 @@ import {
   getUploads,
   sendAiChat,
 } from '../../app/services/api';
+import { STORAGE_KEYS } from '../../app/constants/storageKeys';
 import { formatDataFileName } from '../../app/utils/fileDisplay';
+import { storage } from '../../app/utils/storage';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { getStoredVisibleColumns, setStoredVisibleColumns } from '../tables/tableUtils';
@@ -28,7 +30,7 @@ import { dedupeNotes, getTicketAssignee, getTicketColumns, getTicketId, isSuppre
 import { buildTicketRuleText, matchTicketRules } from './utils/ticketRules';
 
 const DEFAULT_CARD_ASSIGNEE = 'William West';
-const VIEW_STORAGE_KEY = 'westos.work.ticketView';
+const VIEW_STORAGE_KEY = STORAGE_KEYS.TICKET_VIEW;
 const TABLE_PAGE_SIZE = 50;
 const PREVIEW_COLUMN_PREFERENCE_KEY = 'westos.work.previewColumns';
 const DATASET_COLUMN_PREFERENCE_KEY = 'westos.work.datasetColumns';
@@ -714,7 +716,7 @@ export function WorkPage() {
   }, [activeTicketUploads, isLoadingUploads]);
 
   useEffect(() => {
-    window.localStorage.setItem(VIEW_STORAGE_KEY, ticketView);
+    storage.set(VIEW_STORAGE_KEY, ticketView);
   }, [ticketView]);
 
   const previewRows = analysis?.previewRows || analysis?.sampleRows || [];

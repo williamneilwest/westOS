@@ -81,6 +81,14 @@ export function getKnowledgeBase() {
   return request(backendBaseUrl, '/api/kb');
 }
 
+export function getProcessedKnowledgeBase() {
+  return request(backendBaseUrl, '/api/kb/processed');
+}
+
+export function getProcessedKnowledgeBaseDocument(filename) {
+  return request(backendBaseUrl, `/api/kb/processed/${encodeURIComponent(filename)}`);
+}
+
 export function lookupReferenceGroups(searchText) {
   return request(backendBaseUrl, `/api/reference/groups/lookup?q=${encodeURIComponent(searchText)}`);
 }

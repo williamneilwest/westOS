@@ -1,5 +1,6 @@
 import base64
 import json
+import mimetypes
 import os
 import re
 from datetime import datetime, timezone
@@ -46,7 +47,7 @@ def _write_upload_metadata(filename, source):
         json.dump(payload, handle)
 
 
-def _write_upload_metadata_for_directory(directory, filename, source, recipient=None, route='uploads'):
+def _write_upload_metadata_for_directory(directory, filename, source, recipient=None, route='uploads', original_name=None):
     payload = {
         'source': source or 'manual',
         'route': route or 'uploads',
@@ -54,6 +55,8 @@ def _write_upload_metadata_for_directory(directory, filename, source, recipient=
 
     if recipient:
         payload['recipient'] = recipient
+    if original_name:
+        payload['originalName'] = original_name
 
     with open(_metadata_path_for_directory(directory, filename), 'w', encoding='utf-8') as handle:
         json.dump(payload, handle)
@@ -126,32 +129,54 @@ def normalize_recipient(recipient: str) -> str:
     if not value:
         return ''
 
-    # Handle display-name formats and whitespace safely.
     if '<' in value and '>' in value:
         match = re.search(r'<([^>]+)>', value)
         if match:
             value = match.group(1).strip().lower()
 
-    return value
+    return value.strip(' ,;')
+
+
+def _extract_recipients(recipient_value: str) -> list[str]:
+    raw = str(recipient_value or '').strip()
+    if not raw:
+        return []
+
+    matches = re.findall(r'[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}', raw, flags=re.IGNORECASE)
+    recipients = [normalize_recipient(match) for match in matches if normalize_recipient(match)]
+    if recipients:
+        return recipients
+
+    normalized = normalize_recipient(raw)
+    return [normalized] if normalized else []
 
 
 def resolve_target_from_recipient(recipient: str):
-    normalized = normalize_recipient(recipient)
-    local_part = ''
-    domain = ''
-
-    if '@' in normalized:
-        local_part, domain = normalized.split('@', 1)
-
     target = 'uploads'
     directory = UPLOAD_DIR
+    normalized = ''
 
-    if local_part == 'kb' and domain.startswith('mail.'):
-        target = 'kb'
-        directory = KB_UNCATEGORIZED_DIR
-    elif local_part == 'uploads' and domain.startswith('mail.'):
-        target = 'uploads'
-        directory = UPLOAD_DIR
+    for candidate in _extract_recipients(recipient):
+        local_part = ''
+        domain = ''
+
+        if '@' in candidate:
+            local_part, domain = candidate.split('@', 1)
+
+        if local_part == 'kb' and domain.startswith('mail.'):
+            normalized = candidate
+            target = 'kb'
+            directory = KB_UNCATEGORIZED_DIR
+            break
+
+        if not normalized and local_part == 'uploads' and domain.startswith('mail.'):
+            normalized = candidate
+            target = 'uploads'
+            directory = UPLOAD_DIR
+
+    if not normalized:
+        extracted = _extract_recipients(recipient)
+        normalized = extracted[0] if extracted else ''
 
     LOGGER.info('Email routing resolved recipient=%r to target=%s', normalized or recipient or '', target)
     return {
@@ -171,9 +196,9 @@ def extract_recipient_from_request():
     ]
 
     for candidate in candidates:
-        normalized = normalize_recipient(candidate)
-        if normalized:
-            return normalized
+        recipients = _extract_recipients(candidate)
+        if recipients:
+            return ', '.join(recipients)
 
     return ''
 
@@ -231,7 +256,8 @@ def _build_kb_file_url(filename: str, category: str = 'uncategorized') -> str:
 
 
 def save_attachment_bytes_to_directory(filename, content, directory, source='manual', recipient=None, route='uploads'):
-    cleaned = clean_filename(filename)
+    original_name = str(filename or '').strip()
+    cleaned = clean_filename(original_name)
     if not cleaned:
         raise ValueError('Attachment filename is missing or invalid.')
 
@@ -242,7 +268,14 @@ def save_attachment_bytes_to_directory(filename, content, directory, source='man
     with open(path, 'wb') as handle:
         handle.write(content)
 
-    _write_upload_metadata_for_directory(directory, safe_name, source, recipient=recipient, route=route)
+    _write_upload_metadata_for_directory(
+        directory,
+        safe_name,
+        source,
+        recipient=recipient,
+        route=route,
+        original_name=original_name,
+    )
     LOGGER.info('Saved file path=%s source=%s route=%s', path, source, route)
 
     return {
@@ -388,8 +421,6 @@ def list_uploads():
         if not os.path.isfile(full_path):
             continue
 
-        original = extract_original_name(name)
-
         try:
             modified_ts = os.path.getmtime(full_path)
         except OSError:
@@ -397,12 +428,15 @@ def list_uploads():
 
         metadata = _read_upload_metadata(name)
         source = str(metadata.get('source') or 'manual').strip() or 'manual'
+        original = metadata.get('originalName') or extract_original_name(name)
+        mime_type, _ = mimetypes.guess_type(name)
         files.append({
             "filename": name,
             "originalName": original,
             "url": _build_file_url(name),
             "modifiedAt": datetime.fromtimestamp(modified_ts, tz=timezone.utc).isoformat() if modified_ts else None,
             "source": source,
+            "mimeType": mime_type or 'application/octet-stream',
         })
 
     # Newest first

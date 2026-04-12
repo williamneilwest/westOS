@@ -39,7 +39,7 @@ services:
     expose:
       - "${BACKEND_PORT}"
     volumes:
-      - backend_data:/app/data
+      - ./data:/app/data
       - ./frontend/dist:/app/frontend/dist:ro
       - ./backend:/app
     networks:
@@ -117,7 +117,6 @@ networks:
     name: westos
 
 volumes:
-  backend_data:
   caddy_data:
   caddy_config:
   open_webui_data:

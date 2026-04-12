@@ -3,6 +3,8 @@ import { LandingPage } from '../features/landing/LandingPage';
 import { ReadmePage } from '../features/readme/ReadmePage';
 import { AISettingsPage } from '../features/settings/AISettingsPage';
 import { TablePage } from '../features/tables/TablePage';
+import { DocumentPage } from '../features/uploads/DocumentPage';
+import { ProcessedKBPage } from '../features/kb/ProcessedKBPage';
 import { WorkPage } from '../features/work/WorkPage';
 import { GetUserGroupsPage } from '../features/work/GetUserGroupsPage';
 import { GroupSearchToolPage } from '../features/work/GroupSearchToolPage';
@@ -85,6 +87,10 @@ export const router = createBrowserRouter([
         lazy: getRoute('../features/kb/routes.jsx')
       },
       {
+        path: 'kb/processed',
+        Component: ProcessedKBPage
+      },
+      {
         path: 'work',
         lazy: getRoute('../features/work/routes.jsx')
       },
@@ -95,6 +101,10 @@ export const router = createBrowserRouter([
       {
         path: 'work/table',
         Component: TablePage
+      },
+      {
+        path: 'document',
+        Component: DocumentPage
       },
       {
         path: 'work/ai-metrics',
@@ -133,6 +143,10 @@ export const router = createBrowserRouter([
   {
     path: '/work/table',
     element: <Navigate replace to="/app/work/table" />
+  },
+  {
+    path: '/document',
+    element: <Navigate replace to="/app/document" />
   },
   {
     path: '/work/group-search',
@@ -201,6 +215,10 @@ export const router = createBrowserRouter([
   {
     path: '/uploads',
     element: <Navigate replace to="/app/uploads" />
+  },
+  {
+    path: '/kb/processed',
+    element: <Navigate replace to="/app/kb/processed" />
   },
   {
     path: '/data',

@@ -1,7 +1,9 @@
 import { isSuppressedTicketColumn } from '../work/utils/aiAnalysis';
+import { STORAGE_KEYS } from '../../app/constants/storageKeys';
+import { storage } from '../../app/utils/storage';
 
 export const TABLE_PAGE_SIZE = 50;
-const VISIBLE_COLUMNS_STORAGE_KEY = 'westos.table.visibleColumns';
+const VISIBLE_COLUMNS_STORAGE_KEY = STORAGE_KEYS.TABLE_COLUMNS;
 
 export function formatColumnLabel(column) {
   return String(column ?? '')
@@ -77,33 +79,13 @@ export function compareValues(leftValue, rightValue, columnType) {
   return String(leftValue ?? '').localeCompare(String(rightValue ?? ''), undefined, { sensitivity: 'base' });
 }
 
-function canUseStorage() {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
-}
-
 function loadVisibleColumnPreferences() {
-  if (!canUseStorage()) {
-    return {};
-  }
-
-  try {
-    const raw = window.localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+  const stored = storage.get(VISIBLE_COLUMNS_STORAGE_KEY);
+  return stored && typeof stored === 'object' ? stored : {};
 }
 
 function saveVisibleColumnPreferences(preferences) {
-  if (!canUseStorage()) {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
-  } catch {
-    // Ignore storage write failures.
-  }
+  storage.set(VISIBLE_COLUMNS_STORAGE_KEY, preferences);
 }
 
 export function isMobileViewport() {

@@ -1,9 +1,11 @@
 import { Database, Shield, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Button } from '../../app/ui/Button';
 import { getSettings } from '../../app/services/api';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { SectionHeader } from '../../app/ui/SectionHeader';
+import { storage } from '../../app/utils/storage';
 
 function PlaceholderSettingCard({ icon: Icon, title, description }) {
   return (
@@ -21,6 +23,7 @@ function PlaceholderSettingCard({ icon: Icon, title, description }) {
 export function SettingsPage() {
   const [settings, setSettings] = useState(null);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -67,6 +70,20 @@ export function SettingsPage() {
       />
 
       {error ? <p className="status-text status-text--error">{error}</p> : null}
+      {message ? <p className="status-text">{message}</p> : null}
+
+      <div className="stack-row__actions" style={{ marginBottom: '1rem' }}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            storage.clearAll();
+            setMessage('Local data cleared');
+          }}
+        >
+          Clear Local Data
+        </Button>
+      </div>
 
       <div className="card-grid">
         <PlaceholderSettingCard

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronDown, Eye, FileSpreadsheet } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getUploads } from '../../app/services/api';
+import { buildDocumentViewHref, isCsvFile } from '../../app/utils/documentFiles';
 import { formatDataFileName } from '../../app/utils/fileDisplay';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
@@ -58,15 +59,29 @@ export function UploadsPage() {
       <Card className="analysis-grid__wide">
         <CardHeader
           eyebrow="Uploads"
-          title="Stored CSV files"
-          description="CSV attachments delivered to upload@mail.westos.dev appear here."
+          title="Stored files"
+          description="Attachments delivered to uploads@mail.westos.dev appear here."
         />
 
         {error ? <p className="status-text status-text--error">{error}</p> : null}
 
         {files.length ? (
           <div className="stack-list">
-            {files.map((file) => (
+            {files.map((file) => {
+              const csvFile = isCsvFile(file.filename, file.mimeType);
+              const primaryHref = csvFile
+                ? `/app/work/table?url=${encodeURIComponent(file.url)}&fileName=${encodeURIComponent(file.filename)}`
+                : buildDocumentViewHref({
+                    url: file.url,
+                    fileName: file.filename,
+                    mimeType: file.mimeType,
+                    title: 'Uploads',
+                    backTo: '/app/uploads',
+                  });
+
+              const primaryLabel = csvFile ? 'View Table' : 'Open';
+
+              return (
               <div className="stack-row" key={file.filename}>
                 <span className="stack-row__label">
                   <FileSpreadsheet size={16} />
@@ -78,10 +93,10 @@ export function UploadsPage() {
                 <div className="stack-row__actions">
                   <Link
                     className="compact-toggle"
-                    to={`/app/work/table?url=${encodeURIComponent(file.url)}&fileName=${encodeURIComponent(file.filename)}`}
+                    to={primaryHref}
                   >
                     <Eye size={14} />
-                    View
+                    {primaryLabel}
                   </Link>
                   <a className="compact-toggle" download={file.filename} href={file.url}>
                     Download
@@ -95,10 +110,10 @@ export function UploadsPage() {
                   <div className="upload-row-menu__panel">
                     <Link
                       className="upload-row-menu__action"
-                      to={`/app/work/table?url=${encodeURIComponent(file.url)}&fileName=${encodeURIComponent(file.filename)}`}
+                      to={primaryHref}
                     >
                       <Eye size={14} />
-                      View
+                      {primaryLabel}
                     </Link>
                     <a className="upload-row-menu__action" download={file.filename} href={file.url}>
                       Download
@@ -106,13 +121,14 @@ export function UploadsPage() {
                   </div>
                 </details>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <EmptyState
             icon={<FileSpreadsheet size={20} />}
-            title="No CSV uploads yet"
-            description="Incoming SendGrid CSV attachments will show up here once delivered."
+            title="No uploads yet"
+            description="Incoming attachments will show up here once delivered."
           />
         )}
       </Card>

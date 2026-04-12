@@ -2,32 +2,21 @@ import { Copy, Database, Network, RefreshCcw, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getUserGroups } from '../../app/services/api';
+import { STORAGE_KEYS, STORAGE_TTLS } from '../../app/constants/storageKeys';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { SectionHeader } from '../../app/ui/SectionHeader';
+import { storage } from '../../app/utils/storage';
 
-const USER_GROUP_CACHE_KEY = 'work.get-user-groups.cache';
+const USER_GROUP_CACHE_KEY = STORAGE_KEYS.USER_GROUPS_CACHE;
 
 function readCache() {
-  try {
-    const raw = window.localStorage.getItem(USER_GROUP_CACHE_KEY);
-    if (!raw) {
-      return {};
-    }
-
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+  const parsed = storage.getWithTTL(USER_GROUP_CACHE_KEY);
+  return parsed && typeof parsed === 'object' ? parsed : {};
 }
 
 function writeCache(value) {
-  try {
-    window.localStorage.setItem(USER_GROUP_CACHE_KEY, JSON.stringify(value));
-  } catch {
-    // Ignore storage failures and keep the page usable.
-  }
+  storage.setWithTTL(USER_GROUP_CACHE_KEY, value, STORAGE_TTLS.USER_GROUPS_CACHE);
 }
 
 function normalizeCachedResult(response) {

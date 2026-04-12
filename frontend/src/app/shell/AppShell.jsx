@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { STORAGE_KEYS } from '../constants/storageKeys';
+import { storage } from '../utils/storage';
 import { modules } from './modules';
 
 function safeDecodeURIComponent(value) {
@@ -49,6 +51,18 @@ function getContextTitle(pathname) {
 
   if (pathname.startsWith('/app/work/table')) {
     return 'Work / Table';
+  }
+
+  if (pathname.startsWith('/app/document')) {
+    return 'Document Viewer';
+  }
+
+  if (pathname.startsWith('/app/kb/processed')) {
+    return 'Knowledge Base / Processed KB';
+  }
+
+  if (pathname.startsWith('/app/kb')) {
+    return 'Knowledge Base';
   }
 
   if (pathname.startsWith('/app/work')) {
@@ -96,6 +110,18 @@ function getBackTarget(pathname) {
   }
 
   if (pathname.startsWith('/app/work/table')) {
+    return '/app/work';
+  }
+
+  if (pathname.startsWith('/app/document')) {
+    return '/app/uploads';
+  }
+
+  if (pathname.startsWith('/app/kb/processed')) {
+    return '/app/kb';
+  }
+
+  if (pathname.startsWith('/app/kb')) {
     return '/app/work';
   }
 
@@ -155,9 +181,9 @@ export function AppShell() {
   }
 
   useEffect(() => {
-    const saved = window.localStorage.getItem('hero-expanded');
+    const saved = storage.get(STORAGE_KEYS.HERO_EXPANDED);
     if (saved !== null) {
-      setExpanded(saved === 'true');
+      setExpanded(saved === true || saved === 'true');
       return;
     }
 
@@ -166,7 +192,7 @@ export function AppShell() {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem('hero-expanded', String(expanded));
+    storage.set(STORAGE_KEYS.HERO_EXPANDED, expanded);
   }, [expanded]);
 
   return (
@@ -234,6 +260,14 @@ export function AppShell() {
             <ArrowLeft size={14} />
           </NavLink>
           <h2 className="shell__context-title">{contextTitle}</h2>
+          {location.pathname.startsWith('/app/kb') ? (
+            <NavLink
+              to={location.pathname.startsWith('/app/kb/processed') ? '/app/kb' : '/app/kb/processed'}
+              className={({ isActive }) => (isActive ? 'compact-toggle compact-toggle--active' : 'compact-toggle')}
+            >
+              {location.pathname.startsWith('/app/kb/processed') ? 'Knowledge Base' : 'Processed KB'}
+            </NavLink>
+          ) : null}
           <div className="shell__mobile-topbar" role="navigation" aria-label="Mobile page selector">
             <select
               className="shell__mobile-select"
