@@ -16,6 +16,7 @@ import { ConsoleEndpointsPage } from '../features/console/ConsoleEndpointsPage';
 import { ConsolePage } from '../features/console/ConsolePage';
 import { SystemViewerPage } from '../features/system/SystemViewerPage';
 import { LoginPage } from '../features/auth/LoginPage';
+import { LandingPage } from '../features/landing/LandingPage';
 import { AppShell } from './shell/AppShell';
 import { isWorkDomainHost } from './constants/domain';
 import { RequireAuth } from './router/RequireAuth';
@@ -56,7 +57,7 @@ export const router = createBrowserRouter(
   [
     {
     path: '/',
-    element: isWorkSubdomain ? <Navigate replace to="/app/work" /> : <Navigate replace to="/login" />
+    element: isWorkSubdomain ? <Navigate replace to="/app/work" /> : <LandingPage />
   },
     {
       path: '/login',

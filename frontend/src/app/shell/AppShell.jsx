@@ -16,6 +16,8 @@ import { modules } from './modules';
 import { AssistantPopover } from '../../features/ai/components/AssistantPopover';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { UserPanel } from '../../features/auth/UserPanel';
+import { AuthHeaderControl } from '../../features/auth/AuthHeaderControl';
+import { LoginModal } from '../../features/auth/LoginModal';
 
 const NAV_LAST_USED_KEY = 'westos.nav.lastUsed';
 const NAV_LAST_USED_MAP_KEY = 'westos.nav.lastUsedMap';
@@ -264,6 +266,7 @@ export function AppShell() {
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(max-width: 720px)').matches : false
   );
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const { authenticated, isAdmin } = useCurrentUser();
   const visibleModules = useMemo(() => {
     if (!isWorkDomain) {
@@ -392,6 +395,12 @@ export function AppShell() {
     return () => {
       mediaQuery.removeEventListener('change', sync);
     };
+  }, []);
+
+  useEffect(() => {
+    const onAuthRequired = () => setIsLoginModalOpen(true);
+    window.addEventListener('westos:auth-required', onAuthRequired);
+    return () => window.removeEventListener('westos:auth-required', onAuthRequired);
   }, []);
 
   useEffect(() => {
@@ -575,6 +584,7 @@ export function AppShell() {
               </button>
             ) : null}
             <div className="shell__topbar-actions">
+              <AuthHeaderControl onOpenLogin={() => setIsLoginModalOpen(true)} />
               {location.pathname.startsWith('/app/ai') ? (
                 <NavLink
                   to={location.pathname.startsWith('/app/ai/documents') ? '/app/ai' : '/app/ai/documents'}
@@ -638,6 +648,7 @@ export function AppShell() {
           <Outlet />
         </div>
       </main>
+      <LoginModal open={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
     </div>
   );
 }

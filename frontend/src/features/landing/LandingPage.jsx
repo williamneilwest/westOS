@@ -1,5 +1,8 @@
 import { ArrowRight, Blocks, BrainCircuit, BookText, HeartPulse, TerminalSquare, BriefcaseBusiness } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { AuthHeaderControl } from '../auth/AuthHeaderControl';
+import { LoginModal } from '../auth/LoginModal';
 
 const primaryAction = {
   href: '/app',
@@ -60,8 +63,15 @@ const systemStatus = [
 ];
 
 export function LandingPage() {
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+
   return (
     <section className="landing">
+      <header className="landing__topbar">
+        <span className="shell__eyebrow">westOS Public Landing</span>
+        <AuthHeaderControl onOpenLogin={() => setIsLoginOpen(true)} />
+      </header>
+
       <header className="ui-card landing__hero landing__panel">
         <div className="landing__hero-copy">
           <span className="shell__eyebrow">Public surface</span>
@@ -125,6 +135,8 @@ export function LandingPage() {
           ))}
         </ul>
       </section>
+
+      <LoginModal open={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
     </section>
   );
 }

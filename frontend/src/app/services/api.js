@@ -16,11 +16,7 @@ function handleUnauthorizedResponse(response) {
     return;
   }
 
-  if (window.location.pathname === '/login') {
-    return;
-  }
-
-  window.location.assign('/login');
+  window.dispatchEvent(new CustomEvent('westos:auth-required'));
 }
 
 async function request(baseUrl, path, options = {}) {

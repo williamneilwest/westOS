@@ -97,6 +97,13 @@ textarea {
   padding: 1.75rem 0;
 }
 
+.landing__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
 .landing__panel {
   border: 1px solid rgba(110, 231, 183, 0.1);
   background:
@@ -327,6 +334,122 @@ textarea {
 .readme-panel__icon,
 .readme-principles > div svg {
   color: #bbf7d0;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  align-items: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(16, 185, 129, 0.18), transparent 40%),
+    radial-gradient(circle at 90% 90%, rgba(20, 184, 166, 0.14), transparent 45%),
+    var(--bg-main);
+}
+
+.login-page__layout {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.login-page__brand,
+.login-page__card {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.login-page__brand {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.login-page__title {
+  margin: 0;
+  font-size: clamp(1.8rem, 5vw, 2.2rem);
+  font-family: "Space Grotesk", "Inter", sans-serif;
+}
+
+.login-page__subtitle {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.login-page__bullets {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.45rem;
+  color: var(--text-soft);
+}
+
+.login-page__bullets li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.login-page__bullets svg {
+  color: #86efac;
+}
+
+.login-page__guest,
+.login-page__submit {
+  width: 100%;
+}
+
+.login-page__card-copy {
+  margin-top: 0;
+}
+
+.login-page__form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.login-field {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 0.25rem 0.7rem;
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.login-field svg {
+  color: #86efac;
+  flex-shrink: 0;
+}
+
+.login-field:focus-within {
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.login-field input {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  width: 100%;
+  padding: 0.55rem 0;
+  outline: none;
+}
+
+.login-field input::placeholder {
+  color: var(--text-muted);
+}
+
+@media (min-width: 900px) {
+  .login-page__layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 430px);
+    gap: 1.2rem;
+  }
 }
 
 .readme-layout {
@@ -990,6 +1113,90 @@ textarea {
   justify-content: flex-end;
   flex-wrap: nowrap;
   gap: 0.5rem;
+}
+
+.auth-header {
+  position: relative;
+}
+
+.auth-header__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+}
+
+.auth-header__menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  min-width: 180px;
+  z-index: 70;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(7, 14, 10, 0.96);
+  box-shadow: var(--shadow-soft);
+  padding: 0.5rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.auth-header__identity {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.3rem 0.4rem;
+}
+
+.auth-header__identity strong {
+  font-size: 0.8rem;
+}
+
+.auth-header__identity small {
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.auth-header__menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  padding: 0.45rem 0.55rem;
+  cursor: pointer;
+}
+
+.auth-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.auth-modal__surface {
+  width: min(440px, 100%);
+}
+
+.auth-modal__card {
+  border: 1px solid var(--border);
+  background: rgba(7, 15, 11, 0.96);
+}
+
+.auth-modal__close-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.35rem;
 }
 
 .shell__mobile-menu-toggle {
