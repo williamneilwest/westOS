@@ -20,7 +20,7 @@ const WORK_HUB_ACTIVITY_KEY = 'westos.work.lastHubActivity';
 const NAV_GROUPS = [
   { label: 'Workspace', hrefs: ['/app/life', '/app/work', '/app/data'] },
   { label: 'Intelligence', hrefs: ['/app/ai', '/app/kb'] },
-  { label: 'System', hrefs: ['/app/console', '/app/settings'] },
+  { label: 'System', hrefs: ['/app/system', '/app/console', '/app/settings'] },
 ];
 
 function safeDecodeURIComponent(value) {
@@ -106,6 +106,10 @@ function getContextTitle(pathname) {
     return 'AI / Documents';
   }
 
+  if (pathname.startsWith('/app/system')) {
+    return 'System Viewer';
+  }
+
   if (pathname.startsWith('/app/work')) {
     return 'Work';
   }
@@ -150,7 +154,7 @@ function getBackTarget(pathname) {
     return '/app';
   }
 
-  if (pathname === '/app/ai' || pathname === '/app/kb' || pathname === '/app/console' || pathname === '/app/settings') {
+  if (pathname === '/app/ai' || pathname === '/app/kb' || pathname === '/app/system' || pathname === '/app/console' || pathname === '/app/settings') {
     return '/app';
   }
 
@@ -525,19 +529,19 @@ export function AppShell() {
             <h2 className="shell__context-title">{contextTitle}</h2>
           </div>
           <div className="shell__topbar-right">
+            {isMobileViewport ? (
+              <button
+                type="button"
+                className="compact-toggle shell__mobile-menu-toggle"
+                onClick={() => setIsMobileNavOpen((current) => !current)}
+                aria-expanded={isMobileNavOpen}
+                aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              >
+                {isMobileNavOpen ? <X size={16} /> : <Menu size={16} />}
+                Menu
+              </button>
+            ) : null}
             <div className="shell__topbar-actions">
-              {isMobileViewport ? (
-                <button
-                  type="button"
-                  className="compact-toggle shell__mobile-menu-toggle"
-                  onClick={() => setIsMobileNavOpen((current) => !current)}
-                  aria-expanded={isMobileNavOpen}
-                  aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
-                >
-                  {isMobileNavOpen ? <X size={16} /> : <Menu size={16} />}
-                  Menu
-                </button>
-              ) : null}
               {location.pathname.startsWith('/app/ai') ? (
                 <NavLink
                   to={location.pathname.startsWith('/app/ai/documents') ? '/app/ai' : '/app/ai/documents'}

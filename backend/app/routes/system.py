@@ -1,7 +1,9 @@
-from flask import Blueprint
+from flask import Blueprint, jsonify, request
 
 from ..api_response import success_response
+from ..services.system_aggregator import build_system_map
 from ..services.system_metrics import build_system_status
+from ..services.system_validator import run_system_validation
 
 system_bp = Blueprint('system', __name__)
 
@@ -10,3 +12,43 @@ system_bp = Blueprint('system', __name__)
 @system_bp.get('/api/system/status')
 def system_status():
     return success_response(build_system_status())
+
+
+@system_bp.get('/api/system/services')
+def system_services():
+    force_refresh = str(request.args.get('refresh') or '').strip().lower() in {'1', 'true', 'yes'}
+    payload = build_system_map(force_refresh=force_refresh)
+    return success_response(payload.get('services', {}))
+
+
+@system_bp.get('/api/system/features')
+def system_features():
+    force_refresh = str(request.args.get('refresh') or '').strip().lower() in {'1', 'true', 'yes'}
+    payload = build_system_map(force_refresh=force_refresh)
+    return success_response(payload.get('features', []))
+
+
+@system_bp.get('/api/system/datasets')
+def system_datasets():
+    force_refresh = str(request.args.get('refresh') or '').strip().lower() in {'1', 'true', 'yes'}
+    payload = build_system_map(force_refresh=force_refresh)
+    return success_response(payload.get('datasets', {}))
+
+
+@system_bp.get('/api/system/ai')
+def system_ai():
+    force_refresh = str(request.args.get('refresh') or '').strip().lower() in {'1', 'true', 'yes'}
+    payload = build_system_map(force_refresh=force_refresh)
+    return success_response(payload.get('ai', {}))
+
+
+@system_bp.get('/api/system/map')
+def system_map():
+    force_refresh = str(request.args.get('refresh') or '').strip().lower() in {'1', 'true', 'yes'}
+    return success_response(build_system_map(force_refresh=force_refresh))
+
+
+@system_bp.get('/api/system/validate')
+def system_validate():
+    # Validation response shape is consumed directly by the System Viewer health panel.
+    return jsonify(run_system_validation())

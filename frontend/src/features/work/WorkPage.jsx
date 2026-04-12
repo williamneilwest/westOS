@@ -25,6 +25,14 @@ import { ErrorBoundary } from '../../app/ui/ErrorBoundary';
 import { getStoredVisibleColumns, setStoredVisibleColumns } from '../tables/tableUtils';
 import { DataTable } from '../../components/dataset/DataTable';
 import { DataCardList } from '../../components/dataset/DataCardList';
+import {
+  compareValues,
+  filterRowsByGlobalSearch,
+  formatColumnLabel,
+  getCellText,
+  inferColumnType,
+  rowMatchesGlobalSearch,
+} from '../../components/dataset/utils';
 import { DatasetPage } from '../../pages/dataset/DatasetPage';
 import { getCachedWorkDataset, parseCsvText, setCachedWorkDataset } from './workDatasetCache';
 import { dedupeNotes, getTicketAssignee, getTicketColumns, getTicketId, isSuppressedTicketColumn } from './utils/aiAnalysis';
@@ -36,36 +44,6 @@ const TABLE_PAGE_SIZE = 50;
 const PREVIEW_COLUMN_PREFERENCE_KEY = 'westos.work.previewColumns';
 const DATASET_COLUMN_PREFERENCE_KEY = 'westos.work.datasetColumns';
 const ACTIVE_TICKETS_FIXED_FILE = 'ActiveTicketsLAH.csv';
-
-function formatColumnLabel(column) {
-  return String(column ?? '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function inferColumnType(rows, column) {
-  const values = rows
-    .map((row) => String(row[column] ?? '').trim())
-    .filter(Boolean)
-    .slice(0, 25);
-
-  if (!values.length) {
-    return 'text';
-  }
-
-  const numberLike = values.every((value) => !Number.isNaN(Number(value)));
-  if (numberLike) {
-    return 'number';
-  }
-
-  const dateLike = values.every((value) => !Number.isNaN(Date.parse(value)));
-  if (dateLike) {
-    return 'date';
-  }
-
-  return 'text';
-}
 
 function parseAiSections(aiAnalysis) {
   const template = {
@@ -243,10 +221,6 @@ function getColumnFilterDefaults(columnType) {
   return { text: '' };
 }
 
-function getCellText(row, column) {
-  return String(row[column] ?? '');
-}
-
 function getPrimaryColumns(columns = []) {
   const priorityPatterns = [
     /number|ticket|case|incident|request|task|id/i,
@@ -341,48 +315,6 @@ function buildRowDetail(row, columns) {
     metadataGroups,
     notes,
   };
-}
-
-function compareValues(leftValue, rightValue, columnType) {
-  if (columnType === 'number') {
-    const leftNumber = Number(leftValue);
-    const rightNumber = Number(rightValue);
-
-    if (Number.isNaN(leftNumber) && Number.isNaN(rightNumber)) {
-      return 0;
-    }
-
-    if (Number.isNaN(leftNumber)) {
-      return 1;
-    }
-
-    if (Number.isNaN(rightNumber)) {
-      return -1;
-    }
-
-    return leftNumber - rightNumber;
-  }
-
-  if (columnType === 'date') {
-    const leftDate = Date.parse(leftValue);
-    const rightDate = Date.parse(rightValue);
-
-    if (Number.isNaN(leftDate) && Number.isNaN(rightDate)) {
-      return 0;
-    }
-
-    if (Number.isNaN(leftDate)) {
-      return 1;
-    }
-
-    if (Number.isNaN(rightDate)) {
-      return -1;
-    }
-
-    return leftDate - rightDate;
-  }
-
-  return String(leftValue ?? '').localeCompare(String(rightValue ?? ''), undefined, { sensitivity: 'base' });
 }
 
 function matchesColumnFilter(value, columnType, filter = {}) {
@@ -751,10 +683,8 @@ export function WorkPage() {
       return [];
     }
 
-    const query = debouncedRowFilter.trim().toLowerCase();
     const filteredRows = previewRows.filter((row) => {
-      const matchesGlobalSearch =
-        !query || visibleColumns.some((column) => getCellText(row, column).toLowerCase().includes(query));
+      const matchesGlobalSearch = rowMatchesGlobalSearch(row, visibleColumns, debouncedRowFilter);
 
       if (!matchesGlobalSearch) {
         return false;
@@ -864,14 +794,7 @@ export function WorkPage() {
       return [];
     }
 
-    const searchQuery = datasetGlobalSearch.trim().toLowerCase();
-    const filteredRows = tableBaseRows.filter((row) => {
-      if (!searchQuery) {
-        return true;
-      }
-
-      return datasetVisibleColumns.some((column) => getCellText(row, column).toLowerCase().includes(searchQuery));
-    });
+    const filteredRows = filterRowsByGlobalSearch(tableBaseRows, datasetVisibleColumns, datasetGlobalSearch);
 
     if (!datasetSortConfig.column) {
       return filteredRows;

@@ -1,8 +1,7 @@
-import csv
-import io
 from collections import Counter
 
-from .data_processing import detect_category_column, normalize_headers, summarize_non_empty_values
+from .data_processing import detect_category_column, summarize_non_empty_values
+from .dataset_reader import read_dataset
 
 PREVIEW_ROW_LIMIT = 25
 
@@ -14,15 +13,13 @@ def build_csv_analysis(filename, content):
     if not content:
         raise ValueError('The CSV file is empty.')
 
-    decoded = content.decode('utf-8-sig', errors='replace')
-    reader = csv.DictReader(io.StringIO(decoded))
-    headers = normalize_headers(reader.fieldnames)
-    reader.fieldnames = headers
+    parsed = read_dataset(filename, content, file_type_hint='csv')
+    headers = parsed['headers']
+    rows = parsed['rows']
 
     if not headers:
         raise ValueError('The CSV file must include a header row.')
 
-    rows = [dict(row) for row in reader]
     category_column = detect_category_column(headers)
     category_counts = Counter()
 
@@ -50,7 +47,6 @@ def build_csv_analysis(filename, content):
             f'Most frequent {category_column.lower()} is {top_category["label"]} ({top_category["count"]} rows).'
         )
 
-    sparsest_column = None
     if completeness:
         sparsest_column = min(completeness, key=lambda item: item['filled'])
         insights.append(

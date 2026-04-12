@@ -9,6 +9,7 @@ import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { DataTable } from '../../components/dataset/DataTable';
 import { DataCardList } from '../../components/dataset/DataCardList';
+import { filterRowsByGlobalSearch } from '../../components/dataset/utils';
 import { DatasetPage } from '../../pages/dataset/DatasetPage';
 import {
   TABLE_PAGE_SIZE,
@@ -304,14 +305,7 @@ export function TablePage() {
       return [];
     }
 
-    const searchQuery = globalSearch.trim().toLowerCase();
-    const matchingRows = rows.filter((row) => {
-      if (!searchQuery) {
-        return true;
-      }
-
-      return visibleColumns.some((column) => getCellText(row, column).toLowerCase().includes(searchQuery));
-    });
+    const matchingRows = filterRowsByGlobalSearch(rows, visibleColumns, globalSearch);
 
     if (!sortConfig.column) {
       return matchingRows;

@@ -39,12 +39,53 @@ async function requestText(baseUrl, path, options = {}) {
   return response.text();
 }
 
+function unwrapData(payload) {
+  if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'success')) {
+    return payload.data;
+  }
+  return payload;
+}
+
 export function getBackendHealth() {
   return request(backendBaseUrl, '/health');
 }
 
 export function getSystemStatus() {
   return request(backendBaseUrl, '/flows/system/status');
+}
+
+export async function getSystemServices({ refresh = false } = {}) {
+  const suffix = refresh ? '?refresh=true' : '';
+  const payload = await request(backendBaseUrl, `/api/system/services${suffix}`);
+  return unwrapData(payload);
+}
+
+export async function getSystemFeatures({ refresh = false } = {}) {
+  const suffix = refresh ? '?refresh=true' : '';
+  const payload = await request(backendBaseUrl, `/api/system/features${suffix}`);
+  return unwrapData(payload);
+}
+
+export async function getSystemDatasets({ refresh = false } = {}) {
+  const suffix = refresh ? '?refresh=true' : '';
+  const payload = await request(backendBaseUrl, `/api/system/datasets${suffix}`);
+  return unwrapData(payload);
+}
+
+export async function getSystemAi({ refresh = false } = {}) {
+  const suffix = refresh ? '?refresh=true' : '';
+  const payload = await request(backendBaseUrl, `/api/system/ai${suffix}`);
+  return unwrapData(payload);
+}
+
+export async function getSystemMap({ refresh = false } = {}) {
+  const suffix = refresh ? '?refresh=true' : '';
+  const payload = await request(backendBaseUrl, `/api/system/map${suffix}`);
+  return unwrapData(payload);
+}
+
+export function getSystemValidation() {
+  return request(backendBaseUrl, '/api/system/validate');
 }
 
 export function getLogs({ source = 'docker', container = '', tail = 200 } = {}) {

@@ -14,10 +14,21 @@ import { TicketDetail } from '../features/work/pages/TicketDetail';
 import { WorkInsightsPage } from '../features/work/WorkInsightsPage';
 import { UserGroupAssociationPage } from '../features/work/UserGroupAssociationPage';
 import { ConsoleEndpointsPage } from '../features/console/ConsoleEndpointsPage';
+import { SystemViewerPage } from '../features/system/SystemViewerPage';
 import { AppShell } from './shell/AppShell';
 
 const routeModules = import.meta.glob('../features/*/routes.jsx');
 const missingRoute = async () => ({ Component: () => null });
+const hostname = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
+const subdomainRouteMap = {
+  work: '/app/work',
+  data: '/app/data',
+  ai: '/app/ai',
+  life: '/app/life',
+};
+const hostnamePrefix = hostname.split('.')[0] || '';
+const defaultAppRoute = subdomainRouteMap[hostnamePrefix] || '/app/life';
+const isWorkSubdomain = hostnamePrefix === 'work';
 
 const getRoute = (path) => {
   if (!routeModules[path]) {
@@ -40,7 +51,7 @@ export const router = createBrowserRouter(
   [
     {
     path: '/',
-    Component: LandingPage
+    element: isWorkSubdomain ? <Navigate replace to="/app/work" /> : <LandingPage />
   },
     {
     path: '/app',
@@ -48,7 +59,7 @@ export const router = createBrowserRouter(
     children: [
       {
         index: true,
-        element: <Navigate replace to="/app/life" />
+        element: <Navigate replace to={defaultAppRoute} />
       },
       {
         path: 'life',
@@ -57,6 +68,10 @@ export const router = createBrowserRouter(
       {
         path: 'console',
         lazy: getRoute('../features/console/routes.jsx')
+      },
+      {
+        path: 'system',
+        Component: SystemViewerPage
       },
       {
         path: 'console/endpoints',
@@ -207,6 +222,10 @@ export const router = createBrowserRouter(
   {
     path: '/console',
     element: <Navigate replace to="/app/console" />
+  },
+  {
+    path: '/system',
+    element: <Navigate replace to="/app/system" />
   },
   {
     path: '/ai',

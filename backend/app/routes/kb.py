@@ -380,6 +380,9 @@ def get_kb_file(category, filename):
     # Serve with an inline disposition to favor in-browser viewing/printing where supported
     directory = _kb_category_dir(category)
     path = os.path.join(directory, filename)
+    if not os.path.isfile(path):
+        return jsonify({'error': 'KB document not found.'}), 404
+
     mime, _ = mimetypes.guess_type(filename)
 
     response = make_response(send_from_directory(directory, filename, mimetype=mime or None))

@@ -589,6 +589,12 @@ def list_uploads():
 @email_upload_bp.route("/uploads/<path:filename>", methods=["GET"])
 @email_upload_bp.route("/api/uploads/<path:filename>", methods=["GET"])  # parallel API path
 def get_upload(filename):
+    full_path = os.path.join(_uploads_dir(), filename)
+    if not os.path.isfile(full_path):
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Upload not found.'}), 404
+        return ('Not Found', 404)
+
     return send_from_directory(_uploads_dir(), filename)
 
 

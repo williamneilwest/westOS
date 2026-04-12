@@ -47,6 +47,19 @@ services:
     networks:
       - westos
 
+  frontend:
+    build:
+      context: ./frontend
+    container_name: frontend
+    restart: unless-stopped
+    expose:
+      - "5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - westos
+
   ai-gateway:
     build:
       context: ./ai-gateway
@@ -103,6 +116,7 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+      - frontend
       - ai-gateway
       - ollama
       - open-webui

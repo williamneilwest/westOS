@@ -3,7 +3,9 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from flask import Blueprint, current_app, jsonify
+from flask import Blueprint, jsonify
+
+from ..utils.storage import get_legacy_kb_dir, get_processed_kb_dir
 
 
 kb_processed_bp = Blueprint('kb_processed', __name__)
@@ -11,10 +13,17 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _processed_dir():
-    base_dir = current_app.config.get('BACKEND_DATA_DIR', '/app/data')
-    path = os.path.join(base_dir, 'kb', 'processed')
-    os.makedirs(path, exist_ok=True)
-    return path
+    # Primary location is /work/kb/processed; fallback to legacy /kb/processed if populated.
+    primary = get_processed_kb_dir()
+    legacy = os.path.join(get_legacy_kb_dir(), 'processed')
+
+    try:
+        if os.path.isdir(legacy) and os.listdir(legacy):
+            return legacy
+    except OSError:
+        pass
+
+    return primary
 
 
 @kb_processed_bp.get('/api/kb/processed')

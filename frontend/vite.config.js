@@ -8,7 +8,7 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    allowedHosts: ['westos.dev', 'localhost'],
+    allowedHosts: ['westos.dev', 'work.westos.dev', 'data.westos.dev', 'ai.westos.dev', 'life.westos.dev', 'localhost'],
 
     proxy: {
       '/api': 'http://backend:5000',
