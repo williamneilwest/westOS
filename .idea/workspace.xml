@@ -6,11 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="99365218-23de-46b4-b0b7-80829c01ff35" name="Changes" comment="Milestone! Stable">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app/routes/work.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/routes/work.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/app/services/active_tickets.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/services/active_tickets.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/services/api.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/services/api.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/features/work/WorkPage.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/features/work/WorkPage.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/styles/index.css" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/styles/index.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/features/work/utils/aiAnalysis.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/features/work/utils/aiAnalysis.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -151,15 +148,7 @@
       <workItem from="1775971485092" duration="641000" />
       <workItem from="1775972221075" duration="6242000" />
       <workItem from="1775978570958" duration="10231000" />
-      <workItem from="1776019342314" duration="32200000" />
-    </task>
-    <task id="LOCAL-00002" summary="edited ai card">
-      <option name="closed" value="true" />
-      <created>1775904925741</created>
-      <option name="number" value="00002" />
-      <option name="presentableId" value="LOCAL-00002" />
-      <option name="project" value="LOCAL" />
-      <updated>1775904925741</updated>
+      <workItem from="1776019342314" duration="34584000" />
     </task>
     <task id="LOCAL-00003" summary="enabled hot reload for backend and frontend during development">
       <option name="closed" value="true" />
@@ -545,7 +534,15 @@
       <option name="project" value="LOCAL" />
       <updated>1776050267240</updated>
     </task>
-    <option name="localTasksCounter" value="51" />
+    <task id="LOCAL-00051" summary="Milestone! Stable">
+      <option name="closed" value="true" />
+      <created>1776051907782</created>
+      <option name="number" value="00051" />
+      <option name="presentableId" value="LOCAL-00051" />
+      <option name="project" value="LOCAL" />
+      <updated>1776051907782</updated>
+    </task>
+    <option name="localTasksCounter" value="52" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

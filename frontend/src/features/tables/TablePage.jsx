@@ -119,12 +119,13 @@ function buildRowDetail(row, columns) {
   };
 }
 
-function buildDatasetPayload({ fileName, rows, columns, sourceUrl }) {
+function buildDatasetPayload({ fileName, rows, columns, sourceUrl, lastUpdated }) {
   return {
     fileName,
     rows,
     columns,
     sourceUrl,
+    lastUpdated: lastUpdated || null,
   };
 }
 
@@ -137,10 +138,11 @@ export function TablePage() {
   const [searchParams] = useSearchParams();
   const sourceUrl = searchParams.get('url') || '';
   const sourceFileName = searchParams.get('fileName') || '';
+  const sourceModifiedAt = searchParams.get('modifiedAt') || '';
   const initialDataset = getCachedWorkDataset();
   const shouldUseCachedDataset = !sourceUrl;
   const [dataset, setDataset] = useState(() =>
-    shouldUseCachedDataset && initialDataset ? initialDataset : { fileName: sourceFileName, columns: [], rows: [] }
+    shouldUseCachedDataset && initialDataset ? initialDataset : { fileName: sourceFileName, columns: [], rows: [], lastUpdated: null }
   );
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(Boolean(sourceUrl));
@@ -174,7 +176,7 @@ export function TablePage() {
           return;
         }
 
-        setDataset(getCachedWorkDataset() || { fileName: '', columns: [], rows: [] });
+        setDataset(getCachedWorkDataset() || { fileName: '', columns: [], rows: [], lastUpdated: null });
         setIsLoading(false);
         return;
       }
@@ -191,6 +193,7 @@ export function TablePage() {
           rows: parsedDataset.rows,
           columns: parsedDataset.columns,
           sourceUrl,
+          lastUpdated: sourceModifiedAt || cachedDataset?.lastUpdated || new Date().toISOString(),
         });
 
         if (!isMounted) {
@@ -204,7 +207,7 @@ export function TablePage() {
           return;
         }
 
-        setDataset({ fileName: sourceFileName, columns: [], rows: [] });
+        setDataset({ fileName: sourceFileName, columns: [], rows: [], lastUpdated: null });
         setError(requestError.message || 'CSV file could not be loaded.');
       } finally {
         if (isMounted) {
@@ -218,7 +221,7 @@ export function TablePage() {
     return () => {
       isMounted = false;
     };
-  }, [shouldUseCachedDataset, sourceFileName, sourceUrl]);
+  }, [shouldUseCachedDataset, sourceFileName, sourceModifiedAt, sourceUrl]);
 
   useEffect(() => {
     let isMounted = true;
@@ -335,10 +338,11 @@ export function TablePage() {
         inferredTypes: Object.fromEntries((dataset.columns || []).map((column) => [column, inferColumnType(dataset.rows || [], column)])),
         categoryField: '',
         fileName: formatDataFileName(dataset.fileName) || 'Unknown',
+        lastUpdated: dataset.lastUpdated || null,
       },
       view: datasetView,
     }),
-    [dataset.columns, dataset.fileName, dataset.rows, datasetView, visibleColumns]
+    [dataset.columns, dataset.fileName, dataset.lastUpdated, dataset.rows, datasetView, visibleColumns]
   );
 
   useEffect(() => {
@@ -400,6 +404,7 @@ export function TablePage() {
         rows: parsedDataset.rows,
         columns: parsedDataset.columns,
         sourceUrl: '',
+        lastUpdated: new Date().toISOString(),
       });
 
       setDataset(nextDataset);
@@ -427,6 +432,7 @@ export function TablePage() {
         rows: parsedDataset.rows,
         columns: parsedDataset.columns,
         sourceUrl: file.url,
+        lastUpdated: file.modifiedAt || new Date().toISOString(),
       });
 
       setDataset(nextDataset);
@@ -456,6 +462,7 @@ export function TablePage() {
         rows: parsedDataset.rows,
         columns: parsedDataset.columns,
         sourceUrl: '',
+        lastUpdated: entry.savedAt || new Date().toISOString(),
       });
 
       setDataset(nextDataset);

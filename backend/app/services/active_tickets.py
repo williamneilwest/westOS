@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .data_processing import normalize_headers
+from ..utils.storage import get_uploads_dir
 
 
 LOGGER = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ PRIORITY_PATTERNS = (
     re.compile(r'urgency', re.IGNORECASE),
 )
 ACTIVE_BLOCKLIST = ('closed', 'resolved', 'complete', 'completed', 'done', 'cancelled', 'canceled')
+TICKET_NUMBER_VALUE_PATTERN = re.compile(r'\b(?:INC|TASK|REQ)\s*[-_]?\s*\d+\b', re.IGNORECASE)
 
 
 def _storage_root():
@@ -72,11 +74,58 @@ def _current_timestamp():
     return datetime.now(timezone.utc).isoformat()
 
 
-def _resolve_active_ticket_dataset_path():
-    fixed_path = _storage_root() / 'work' / 'live' / 'ActiveTicketsLAH.csv'
-    if not fixed_path.exists():
+def _format_file_mtime(value):
+    if value is None:
         return None
-    return fixed_path
+    try:
+        return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat()
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def _resolve_active_ticket_dataset_path():
+    uploads_dir = Path(get_uploads_dir())
+    latest_email_match = None
+    latest_email_mtime = -1.0
+
+    if uploads_dir.exists():
+        for entry in uploads_dir.iterdir():
+            if not entry.is_file():
+                continue
+            name = entry.name
+            lower_name = name.lower()
+            if not lower_name.endswith('.csv'):
+                continue
+            if lower_name.endswith('.old') or lower_name.endswith('.meta.json'):
+                continue
+            if 'activetickets' not in lower_name:
+                continue
+
+            meta_path = Path(f'{entry}.meta.json')
+            if not meta_path.exists():
+                continue
+            try:
+                metadata = json.loads(meta_path.read_text(encoding='utf-8'))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if str(metadata.get('source') or '').strip().lower() != SOURCE_EMAIL:
+                continue
+
+            try:
+                mtime = entry.stat().st_mtime
+            except OSError:
+                mtime = 0
+            if mtime >= latest_email_mtime:
+                latest_email_mtime = mtime
+                latest_email_match = entry
+
+    if latest_email_match is not None:
+        return latest_email_match
+
+    fixed_path = _storage_root() / 'work' / 'live' / 'ActiveTicketsLAH.csv'
+    if fixed_path.exists():
+        return fixed_path
+    return None
 
 
 def _parse_csv_bytes(content):
@@ -150,10 +199,15 @@ def _write_source_metadata(source, last_updated):
 def _set_cached_metadata(source, last_updated):
     global _cached_metadata
     path = _resolve_active_ticket_dataset_path()
+    try:
+        file_mtime = path.stat().st_mtime if path else None
+    except OSError:
+        file_mtime = None
     _cached_metadata = {
         'source': source,
         'last_updated': last_updated,
         'file_name': path.name if path else None,
+        'file_mtime': file_mtime,
     }
 
 
@@ -238,6 +292,10 @@ def _row_ticket_id(row, columns):
         value = str(row.get(column, '')).strip()
         if value:
             return value
+    for value in (row.values() if isinstance(row, dict) else []):
+        text = str(value or '').strip()
+        if TICKET_NUMBER_VALUE_PATTERN.search(text):
+            return text
     return ''
 
 
@@ -272,9 +330,17 @@ def normalize_ticket(ticket):
                 return text
         return ''
 
+    ticket_id = _pick('number', 'Number')
+    if not ticket_id and isinstance(row, dict):
+        ticket_id = _row_ticket_id(row, list(row.keys()))
+
+    title = _pick('short_description', 'Short description')
+    if not title and ticket_id:
+        title = ticket_id
+
     return {
-        'id': _pick('number', 'Number'),
-        'title': _pick('short_description', 'Short description'),
+        'id': ticket_id,
+        'title': title,
         'assigned_to': _pick('assigned_to', 'Assigned to', 'Assignee'),
         'status': _pick('status', 'State'),
         'priority': _pick('priority', 'Priority'),
@@ -325,7 +391,6 @@ def build_todo_from_tickets(tickets, assignee, columns, limit=10):
         normalized_tickets.append(normalized)
 
     items = []
-    filtered_count = 0
     for ticket in normalized_tickets:
         assigned_to = str(ticket.get('assigned_to', '') or '').strip()
         status = str(ticket.get('status', '') or '').strip()
@@ -336,8 +401,6 @@ def build_todo_from_tickets(tickets, assignee, columns, limit=10):
             continue
         if status and not _is_active_status(status):
             continue
-        filtered_count += 1
-
         ticket_id = str(ticket.get('id', '') or '').strip() or 'UNKNOWN'
         title = str(ticket.get('title', '') or '').strip() or f'Ticket {ticket_id}'
         priority = _normalize_priority(ticket.get('priority', ''))
@@ -353,9 +416,6 @@ def build_todo_from_tickets(tickets, assignee, columns, limit=10):
         if len(items) >= max_items:
             break
 
-    print('ASSIGNEE FILTER:', assignee)
-    print('MATCHES FOUND:', filtered_count)
-
     return items
 
 
@@ -363,13 +423,28 @@ def load_active_ticket_dataset(force_reload=False):
     global _cached_dataset, _cached_metadata
 
     if _cached_dataset is not None and not force_reload:
+        current_path = _resolve_active_ticket_dataset_path()
+        current_name = current_path.name if current_path else None
+        try:
+            current_mtime = current_path.stat().st_mtime if current_path else None
+        except OSError:
+            current_mtime = None
+        cached_name = (_cached_metadata or {}).get('file_name') if isinstance(_cached_metadata, dict) else None
+        cached_mtime = (_cached_metadata or {}).get('file_mtime') if isinstance(_cached_metadata, dict) else None
+        if current_name == cached_name and current_mtime == cached_mtime:
+            return _cached_dataset
+
         if _cached_metadata is None:
             path = _resolve_active_ticket_dataset_path()
+            try:
+                file_mtime = path.stat().st_mtime if path and path.exists() else None
+            except OSError:
+                file_mtime = None
             _cached_metadata = {
                 **_read_source_metadata(),
                 'file_name': path.name if path else None,
+                'file_mtime': file_mtime,
             }
-        return _cached_dataset
 
     path = _resolve_active_ticket_dataset_path()
 
@@ -381,14 +456,20 @@ def load_active_ticket_dataset(force_reload=False):
         _cached_metadata = {
             **_read_source_metadata(),
             'file_name': None,
+            'file_mtime': None,
         }
         return _cached_dataset
 
     content = path.read_bytes()
     _cached_dataset = _parse_csv_bytes(content)
+    try:
+        file_mtime = path.stat().st_mtime
+    except OSError:
+        file_mtime = None
     _cached_metadata = {
         **_read_source_metadata(),
         'file_name': path.name,
+        'file_mtime': file_mtime,
     }
     return _cached_dataset
 
@@ -400,9 +481,14 @@ def get_source_metadata(force_reload=False):
         return _cached_metadata
 
     path = _resolve_active_ticket_dataset_path()
+    try:
+        file_mtime = path.stat().st_mtime if path and path.exists() else None
+    except OSError:
+        file_mtime = None
     _cached_metadata = {
         **_read_source_metadata(),
         'file_name': path.name if path else None,
+        'file_mtime': file_mtime,
     }
     return _cached_metadata
 
@@ -423,10 +509,11 @@ def cache_active_ticket_dataset(content, source):
 def load_latest_ticket_payload(force_reload=False):
     dataset = load_active_ticket_dataset(force_reload=force_reload)
     metadata = get_source_metadata(force_reload=force_reload)
+    last_updated = metadata.get('last_updated') or _format_file_mtime(metadata.get('file_mtime'))
 
     return {
         'source': metadata.get('source'),
-        'last_updated': metadata.get('last_updated'),
+        'last_updated': last_updated,
         'fileName': metadata.get('file_name'),
         'tickets': dataset['rows'],
         'columns': dataset['columns'],

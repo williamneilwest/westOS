@@ -39,6 +39,7 @@ const AI_SECTION_KEYS = {
   comments: 'comments',
   status: 'status',
 };
+const TICKET_VALUE_PATTERN = /\b(?:INC|TASK|REQ)\s*[-_]?\s*\d+\b/i;
 
 function normalizeValue(value) {
   return String(value ?? '').trim();
@@ -233,7 +234,21 @@ export function dedupeNotes(notes = []) {
 
 export function getTicketId(ticket, columns = Object.keys(ticket || {})) {
   const fieldMap = getTicketColumns(columns);
-  return normalizeValue(ticket?.[fieldMap.id]) || normalizeValue(ticket?.id) || 'Untitled ticket';
+  const explicitId = normalizeValue(ticket?.[fieldMap.id]) || normalizeValue(ticket?.id);
+  if (explicitId) {
+    return explicitId;
+  }
+
+  if (ticket && typeof ticket === 'object') {
+    for (const value of Object.values(ticket)) {
+      const text = normalizeValue(value);
+      if (text && TICKET_VALUE_PATTERN.test(text)) {
+        return text;
+      }
+    }
+  }
+
+  return 'Unknown ticket';
 }
 
 export function getTicketTitle(ticket, columns = Object.keys(ticket || {})) {

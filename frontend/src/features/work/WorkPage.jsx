@@ -375,6 +375,7 @@ export function WorkPage() {
     initialDataset ? { columns: initialDataset.columns || [], rows: initialDataset.rows || [] } : { columns: [], rows: [] }
   );
   const [latestFileName, setLatestFileName] = useState(initialDataset?.fileName || '');
+  const [latestLastUpdated, setLatestLastUpdated] = useState(initialDataset?.lastUpdated || null);
   const [latestMessage, setLatestMessage] = useState('');
   const [datasetView, setDatasetView] = useState(() => {
     const stored = String(storage.get(VIEW_STORAGE_KEY) || '').toLowerCase();
@@ -453,16 +454,19 @@ export function WorkPage() {
       const nextDataset = {
         analysisId: entry.id,
         fileName: entry.fileName,
+        lastUpdated: entry.savedAt || null,
         columns: parsedDataset.columns,
         rows: parsedDataset.rows,
       };
       setLatestDataset({ columns: parsedDataset.columns, rows: parsedDataset.rows });
       setLatestFileName(entry.fileName);
+      setLatestLastUpdated(entry.savedAt || null);
       setLatestMessage('');
       setCachedWorkDataset(nextDataset);
     } catch (requestError) {
       setCachedWorkDataset(null);
       setLatestDataset({ columns: [], rows: [] });
+      setLatestLastUpdated(null);
       setError(requestError.message || 'Saved CSV data could not be loaded.');
     } finally {
       if (showLoading) {
@@ -579,6 +583,7 @@ export function WorkPage() {
         const fileName = String(latestTicketsPayload?.fileName || ACTIVE_TICKETS_FIXED_FILE).trim() || ACTIVE_TICKETS_FIXED_FILE;
         const nextDataset = {
           fileName,
+          lastUpdated: latestTicketsPayload?.last_updated || null,
           columns,
           rows,
         };
@@ -586,6 +591,7 @@ export function WorkPage() {
         setAnalysis(buildLocalAnalysis(fileName, nextDataset));
         setLatestDataset({ columns, rows });
         setLatestFileName(fileName);
+        setLatestLastUpdated(latestTicketsPayload?.last_updated || null);
         setLatestMessage(String(latestTicketsPayload?.message || '').trim());
         setAutoMetrics(
           latestTicketsPayload?.metrics && typeof latestTicketsPayload.metrics === 'object'
@@ -601,6 +607,7 @@ export function WorkPage() {
         setAnalysis(null);
         setLatestDataset({ columns: [], rows: [] });
         setLatestFileName(ACTIVE_TICKETS_FIXED_FILE);
+        setLatestLastUpdated(null);
         setAutoMetrics({ total: 0, flagged: 0, visible_columns: 0, open: 0 });
         setAutoTodo([]);
         setError(requestError.message || 'Active Tickets dataset could not be loaded.');
@@ -899,8 +906,9 @@ export function WorkPage() {
       categoryField: analysis?.categoryColumn || '',
       ticketColumn,
       fileName: formatDataFileName(latestFileName) || 'Unknown',
+      lastUpdated: latestLastUpdated,
     }),
-    [analysis?.categoryColumn, datasetColumns, latestDataset?.rows, latestFileName, ticketColumn]
+    [analysis?.categoryColumn, datasetColumns, latestDataset?.rows, latestFileName, latestLastUpdated, ticketColumn]
   );
 
   const datasetState = useMemo(
@@ -934,11 +942,13 @@ export function WorkPage() {
       const nextDataset = {
         analysisId: result.data.analysisId,
         fileName: result.data.fileName,
+        lastUpdated: result.data.savedAt || new Date().toISOString(),
         columns: parsedDataset.columns,
         rows: parsedDataset.rows,
       };
       setLatestDataset({ columns: parsedDataset.columns, rows: parsedDataset.rows });
       setLatestFileName(result.data.fileName);
+      setLatestLastUpdated(result.data.savedAt || new Date().toISOString());
       setLatestMessage('');
       setCachedWorkDataset(nextDataset);
       setSelectedRow(null);
@@ -991,6 +1001,7 @@ export function WorkPage() {
       const nextAnalysis = buildLocalAnalysis(file.filename, parsedDataset);
       const nextDataset = {
         fileName: file.filename,
+        lastUpdated: file.modifiedAt || new Date().toISOString(),
         columns: parsedDataset.columns,
         rows: parsedDataset.rows,
       };
@@ -998,6 +1009,7 @@ export function WorkPage() {
       setAnalysis(nextAnalysis);
       setLatestDataset({ columns: parsedDataset.columns, rows: parsedDataset.rows });
       setLatestFileName(file.filename);
+      setLatestLastUpdated(file.modifiedAt || new Date().toISOString());
       setLatestMessage(parsedDataset.rows.length ? '' : 'The selected upload contains no data rows.');
       setCachedWorkDataset(nextDataset);
       setSelectedRow(null);
