@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { useBackNavigation } from '../../app/hooks/useBackNavigation';
 import {
   getReferenceGroups,
+  getUserGroups,
   lookupReferenceGroupsFromFlow,
 } from '../../app/services/api';
 import { STORAGE_KEYS, STORAGE_TTLS } from '../../app/constants/storageKeys';
@@ -12,9 +13,13 @@ import { EmptyState } from '../../app/ui/EmptyState';
 import { SectionHeader } from '../../app/ui/SectionHeader';
 import { storage } from '../../app/utils/storage';
 import {
+  getCachedUsersFromMap,
   getCachedGroupsForUser,
   getCachedUsersWithDiagnostics,
+  normalizeFlowMembershipResponse,
   readUserGroupsCacheMap,
+  upsertCachedUserRecord,
+  writeUserGroupsCacheMap,
 } from './userGroupsCache';
 
 const SEARCH_HISTORY_KEY = STORAGE_KEYS.GROUP_SEARCH_HISTORY;
@@ -141,6 +146,7 @@ export function UserGroupAssociationPage() {
   const [groupQuery, setGroupQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [flowLoading, setFlowLoading] = useState(false);
+  const [userFlowLoading, setUserFlowLoading] = useState(false);
   const [error, setError] = useState('');
   const [copyMessage, setCopyMessage] = useState('');
   const [flowMessage, setFlowMessage] = useState('');
@@ -240,11 +246,12 @@ export function UserGroupAssociationPage() {
     const cacheMap = readUserGroupsCacheMap();
     const cachedGroupIds = getCachedGroupsForUser(selectedUserId, cacheMap).map((group) => group.id);
     const selectedSet = new Set(cachedGroupIds);
-    setSelectedGroupIds(cachedGroupIds);
+    setSelectedGroupIds([]);
     setGroups((current) => mergeGroups(current, getCachedGroupsForUser(selectedUserId, cacheMap)));
     debugLog('Selected user hydrated from cache', {
       opid: selectedUserId,
       groupsCount: selectedSet.size,
+      preselectedCount: 0,
     });
   }, [selectedUserId]);
 
@@ -291,16 +298,14 @@ export function UserGroupAssociationPage() {
 
   const filteredGroups = useMemo(() => {
     const query = normalizeSearch(groupQuery);
+    if (!selectedUser || !query) {
+      return [];
+    }
     const selectedIds = new Set(selectedGroupIds);
 
     const matches = groups
       .filter((group) => isValidGroupId(group?.id))
-      .filter((group) => {
-        if (!query) {
-          return true;
-        }
-        return [group.id, group.name].some((value) => normalizeSearch(value).includes(query));
-      })
+      .filter((group) => [group.id, group.name].some((value) => normalizeSearch(value).includes(query)))
       .sort((left, right) => {
         const leftSelected = selectedIds.has(left.id) ? 1 : 0;
         const rightSelected = selectedIds.has(right.id) ? 1 : 0;
@@ -324,7 +329,7 @@ export function UserGroupAssociationPage() {
       });
 
     return matches.slice(0, 24);
-  }, [clickedGroups, groupQuery, groups, selectedGroupIds]);
+  }, [clickedGroups, groupQuery, groups, selectedGroupIds, selectedUser]);
 
   const generatedScript = useMemo(
     () => buildAssociationScript(
@@ -414,6 +419,41 @@ export function UserGroupAssociationPage() {
     }
   }
 
+  async function handleUserFlowLookup() {
+    const targetOpid = String(selectedUserId || userQuery).trim();
+    if (!targetOpid) {
+      setFlowMessage('Enter or select a user OPID before calling Get User Groups.');
+      return;
+    }
+
+    setUserFlowLoading(true);
+    setError('');
+    setFlowMessage('');
+
+    try {
+      const response = await getUserGroups(targetOpid);
+      const normalized = normalizeFlowMembershipResponse(response, targetOpid);
+      const cacheMap = readUserGroupsCacheMap();
+      const nextCacheMap = upsertCachedUserRecord(normalized, cacheMap);
+      writeUserGroupsCacheMap(nextCacheMap);
+
+      const nextUsers = getCachedUsersFromMap(nextCacheMap);
+      setUsers(nextUsers);
+      setCacheUsersLoaded(nextUsers.length);
+      setSelectedUserId(normalized.opid || targetOpid);
+      setGroups((current) => mergeGroups(current, normalized.groups || []));
+      setFlowMessage(`Get User Groups returned ${normalized.groups.length} group${normalized.groups.length === 1 ? '' : 's'} for ${targetOpid}.`);
+      debugLog('Get User Groups sub-flow run', {
+        opid: targetOpid,
+        groupsCount: normalized.groups.length,
+      });
+    } catch (requestError) {
+      setError(requestError.message || 'Get User Groups flow failed.');
+    } finally {
+      setUserFlowLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <section className="module">
@@ -473,6 +513,17 @@ export function UserGroupAssociationPage() {
                   placeholder="Search by OPID, name, or email"
                 />
               </label>
+              <div className="association-toolbar">
+                <button
+                  type="button"
+                  className="ui-button ui-button--primary"
+                  onClick={handleUserFlowLookup}
+                  disabled={userFlowLoading}
+                >
+                  <UsersRound size={16} />
+                  {userFlowLoading ? 'Running Get User Groups...' : 'Run Get User Groups'}
+                </button>
+              </div>
             </div>
 
             <div className="association-list" role="list" aria-label="Reference users">
@@ -570,17 +621,23 @@ export function UserGroupAssociationPage() {
                   );
                 })
               ) : (
-                selectedUser ? (
-                  <EmptyState
-                    icon={<Search size={18} />}
-                    title="No cached groups for this user"
-                    description="Use Search Power Automate to fetch additional groups when needed."
-                  />
-                ) : (
+                !selectedUser ? (
                   <EmptyState
                     icon={<Search size={18} />}
                     title="No user selected"
                     description="Select a cached user first to validate group membership."
+                  />
+                ) : !groupQuery.trim() ? (
+                  <EmptyState
+                    icon={<Search size={18} />}
+                    title="Start typing to search groups"
+                    description="Groups only appear after you enter a search term."
+                  />
+                ) : (
+                  <EmptyState
+                    icon={<Search size={18} />}
+                    title="No matching groups"
+                    description="Try another search term or use Search Power Automate for additional matches."
                   />
                 )
               )}

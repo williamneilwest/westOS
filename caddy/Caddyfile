@@ -27,10 +27,6 @@ work.westos.dev {
 
 	handle /api/* {
 		reverse_proxy backend:5000 {
-			header_up Host {host}
-			header_up X-Real-IP {remote_host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
 		}
 	}
 
@@ -48,10 +44,6 @@ work.westos.dev {
 
 	handle /webhooks/* {
 		reverse_proxy backend:5000 {
-			header_up Host {host}
-			header_up X-Real-IP {remote_host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
 		}
 	}
 
@@ -73,10 +65,7 @@ westos.dev {
 
 	handle /api/* {
 		reverse_proxy backend:5000 {
-			header_up Host {host}
-			header_up X-Real-IP {remote_host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
+
 		}
 	}
 
@@ -94,10 +83,7 @@ westos.dev {
 
 	handle /webhooks/* {
 		reverse_proxy backend:5000 {
-			header_up Host {host}
-			header_up X-Real-IP {remote_host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
+
 		}
 	}
 
@@ -133,10 +119,7 @@ files.westos.dev {
 cockpit.westos.dev {
 	import infra_service
 	reverse_proxy host.docker.internal:9090 {
-		header_up Host {host}
-		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-For {remote_host}
-		header_up X-Forwarded-Proto {scheme}
+
 	}
 }
 
@@ -160,18 +143,4 @@ plex.westos.app {
 torrent.westos.app {
 	import infra_service
 	reverse_proxy qbittorrent:8080
-}
-
-# -------------------------
-# 🚫 CATCH ALL
-# -------------------------
-
-*.westos.dev {
-	import block_common
-	respond "Not Found" 404
-}
-
-*.westos.app {
-	import block_common
-	respond "Not Found" 404
 }

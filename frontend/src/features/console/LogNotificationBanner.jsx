@@ -1,7 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { getLogsSummary } from '../../app/services/api';
-
-const REFRESH_MS = 45000;
 
 function levelBadge(level) {
   if (level === 'high') {
@@ -23,6 +21,8 @@ export function LogNotificationBanner({ onExpandLogs = null }) {
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [noDataMessage, setNoDataMessage] = useState('');
+  const [hasAnalyzed, setHasAnalyzed] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const highErrors = useMemo(
     () => (summary.errors || []).filter((item) => String(item?.severity || '').toLowerCase() === 'high'),
@@ -39,6 +39,7 @@ export function LogNotificationBanner({ onExpandLogs = null }) {
 
   async function loadSummary() {
     try {
+      setLoading(true);
       setError('');
       setNoDataMessage('');
       const payload = await getLogsSummary();
@@ -55,23 +56,44 @@ export function LogNotificationBanner({ onExpandLogs = null }) {
       if (String(payload?.status || '').toLowerCase() === 'no_data') {
         setNoDataMessage(String(payload?.message || 'No logs available to analyze'));
       }
+      setHasAnalyzed(true);
     } catch (requestError) {
       setError(requestError.message || 'Log summary unavailable.');
       setNoDataMessage('');
       setSummary({ errors: [], warnings: [] });
+    } finally {
+      setLoading(false);
     }
   }
 
-  useEffect(() => {
-    void loadSummary();
-    const timer = window.setInterval(() => {
-      void loadSummary();
-    }, REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, []);
-
   if (error) {
-    return <div className="log-notification-banner log-notification-banner--error">{error}</div>;
+    return (
+      <div className="log-notification-banner log-notification-banner--error">
+        <div className="log-notification-banner__row">
+          <span>{error}</span>
+          <div className="table-actions">
+            <button className="compact-toggle" type="button" onClick={() => void loadSummary()} disabled={loading}>
+              {loading ? 'Analyzing...' : 'Analyze Logs'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasAnalyzed) {
+    return (
+      <div className="log-notification-banner log-notification-banner--healthy">
+        <div className="log-notification-banner__row">
+          <span>Log analysis is idle. Click Analyze Logs to run it.</span>
+          <div className="table-actions">
+            <button className="compact-toggle" type="button" onClick={() => void loadSummary()} disabled={loading}>
+              {loading ? 'Analyzing...' : 'Analyze Logs'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -79,6 +101,9 @@ export function LogNotificationBanner({ onExpandLogs = null }) {
       <div className="log-notification-banner__row">
         <span>{bannerMessage}</span>
         <div className="table-actions">
+          <button className="compact-toggle" type="button" onClick={() => void loadSummary()} disabled={loading}>
+            {loading ? 'Analyzing...' : 'Analyze Logs'}
+          </button>
           <button className="compact-toggle" type="button" onClick={() => setExpanded((current) => !current)}>
             {expanded ? 'Hide' : 'Expand'}
           </button>

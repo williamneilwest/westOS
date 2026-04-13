@@ -22,7 +22,7 @@ import { LoginModal } from '../../features/auth/LoginModal';
 const NAV_LAST_USED_KEY = 'westos.nav.lastUsed';
 const NAV_LAST_USED_MAP_KEY = 'westos.nav.lastUsedMap';
 const NAV_GROUPS = [
-  { label: 'Workspace', hrefs: ['/app/life', '/app/work', '/app/data'] },
+  { label: 'Workspace', hrefs: ['/app/life', '/app/work', '/app/data', '/app/profile'] },
   { label: 'Intelligence', hrefs: ['/app/ai', '/app/kb'] },
   { label: 'System', hrefs: ['/app/system', '/app/console', '/app/settings'] },
 ];
@@ -72,6 +72,9 @@ function getContextTitle(pathname) {
 
   if (pathname.startsWith('/app/work/active-tickets')) {
     return 'Work / Active Tickets';
+  }
+  if (pathname.startsWith('/app/profile')) {
+    return 'Profile';
   }
 
   if (pathname.startsWith('/app/work/ai-metrics')) {
@@ -155,6 +158,9 @@ function getBackTarget(pathname) {
   }
 
   if (pathname === '/app/life' || pathname === '/app/work' || pathname === '/app/data') {
+    return '/app';
+  }
+  if (pathname === '/app/profile') {
     return '/app';
   }
 

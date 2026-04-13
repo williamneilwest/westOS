@@ -36,6 +36,7 @@ WORK_ALLOWED_PREFIXES = (
     '/api/email/upload',
     '/api/files',
     '/api/data/files',
+    '/api/profile',
 )
 PUBLIC_AUTH_PATH_PREFIX = '/api/auth/'
 PUBLIC_WEBHOOK_PREFIXES = (

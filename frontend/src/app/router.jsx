@@ -18,6 +18,7 @@ import { ConsolePage } from '../features/console/ConsolePage';
 import { SystemViewerPage } from '../features/system/SystemViewerPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { AdminUsersPage } from '../features/auth/AdminUsersPage';
+import { ProfilePage } from '../features/auth/ProfilePage';
 import { LandingPage } from '../features/landing/LandingPage';
 import { TerminalPage } from '../features/admin/TerminalPage';
 import { AppShell } from './shell/AppShell';
@@ -149,6 +150,10 @@ export const router = createBrowserRouter(
       {
         path: 'admin/users',
         element: isWorkSubdomain ? workRedirect : <RequireAdmin><AdminUsersPage /></RequireAdmin>
+      },
+      {
+        path: 'profile',
+        element: isWorkSubdomain ? workRedirect : <ProfilePage />
       },
       {
         path: 'uploads',
@@ -300,6 +305,10 @@ export const router = createBrowserRouter(
   {
     path: '/admin/users',
     element: isWorkSubdomain ? workRedirect : <Navigate replace to="/app/admin/users" />
+  },
+  {
+    path: '/profile',
+    element: isWorkSubdomain ? workRedirect : <Navigate replace to="/app/profile" />
   },
   {
     path: '/settings',

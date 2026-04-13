@@ -286,7 +286,6 @@ export function WorkHubPage() {
       <SectionHeader
         tag="/app/work"
         title="Work Hub"
-        description="Start from domain context, then execute actions without leaving the flow."
       />
 
       <nav className="work-domain-nav" aria-label="Domain navigation">
