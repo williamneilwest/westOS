@@ -3,41 +3,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useBackNavigation } from '../../app/hooks/useBackNavigation';
 import { getUserGroups } from '../../app/services/api';
-import { STORAGE_KEYS, STORAGE_TTLS } from '../../app/constants/storageKeys';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { SectionHeader } from '../../app/ui/SectionHeader';
-import { storage } from '../../app/utils/storage';
-
-const USER_GROUP_CACHE_KEY = STORAGE_KEYS.USER_GROUPS_CACHE;
-
-function readCache() {
-  const parsed = storage.getWithTTL(USER_GROUP_CACHE_KEY);
-  return parsed && typeof parsed === 'object' ? parsed : {};
-}
-
-function writeCache(value) {
-  storage.setWithTTL(USER_GROUP_CACHE_KEY, value, STORAGE_TTLS.USER_GROUPS_CACHE);
-}
-
-function normalizeCachedResult(response) {
-  const items = Array.isArray(response?.items)
-    ? response.items.map((group) => ({
-        id: String(group?.id || '').trim(),
-        name: String(group?.name || group?.id || '').trim(),
-      })).filter((group) => group.id)
-    : [];
-
-  return {
-    userOpid: String(response?.userOpid || '').trim(),
-    items,
-    identifiedCount: Number(response?.identifiedCount || 0),
-    totalCount: Number(response?.totalCount || items.length),
-    created: Number(response?.created || 0),
-    cachedAt: new Date().toISOString(),
-    source: String(response?.source || 'flow').trim() || 'flow',
-  };
-}
+import {
+  getCachedUsersFromMap,
+  normalizeFlowMembershipResponse,
+  readUserGroupsCacheMap,
+  upsertCachedUserRecord,
+  writeUserGroupsCacheMap,
+} from './userGroupsCache';
 
 function formatTimestamp(value) {
   if (!value) {
@@ -83,28 +58,26 @@ export function GetUserGroupsPage() {
   const [copyMessage, setCopyMessage] = useState('');
 
   useEffect(() => {
-    const nextCache = readCache();
+    const nextCache = readUserGroupsCacheMap();
+    const normalizedUsers = getCachedUsersFromMap(nextCache);
     setCache(nextCache);
-    const firstKey = Object.keys(nextCache).sort()[0] || '';
+    const firstKey = normalizedUsers[0]?.opid || '';
     setSelectedOpid(firstKey);
   }, []);
 
   const cachedUsers = useMemo(
-    () =>
-      Object.values(cache)
-        .filter((item) => item?.userOpid)
-        .sort((left, right) => String(left.userOpid).localeCompare(String(right.userOpid))),
+    () => getCachedUsersFromMap(cache),
     [cache]
   );
 
-  const result = selectedOpid ? cache[selectedOpid] || null : null;
+  const result = selectedOpid ? cachedUsers.find((user) => user.opid === selectedOpid) || null : null;
   const resultJson = useMemo(
     () =>
       result
         ? JSON.stringify(
             {
-              userOpid: result.userOpid,
-              groups: result.items.map((group) => ({ id: group.id, name: group.name })),
+              userOpid: result.opid,
+              groups: result.groups.map((group) => ({ id: group.id, name: group.name })),
             },
             null,
             2
@@ -131,13 +104,10 @@ export function GetUserGroupsPage() {
 
     try {
       const response = await getUserGroups(normalizedOpid);
-      const normalized = normalizeCachedResult(response);
-      const nextCache = {
-        ...cache,
-        [normalizedOpid]: normalized,
-      };
+      const normalized = normalizeFlowMembershipResponse(response, normalizedOpid);
+      const nextCache = upsertCachedUserRecord(normalized, cache);
       setCache(nextCache);
-      writeCache(nextCache);
+      writeUserGroupsCacheMap(nextCache);
       setSelectedOpid(normalizedOpid);
     } catch (requestError) {
       setError(requestError.message || 'User group lookup failed.');
@@ -227,19 +197,19 @@ export function GetUserGroupsPage() {
             <div className="association-summary">
               <div className="association-summary__row">
                 <span>User OPID</span>
-                <strong>{result.userOpid}</strong>
+                <strong>{result.opid}</strong>
               </div>
               <div className="association-summary__row">
                 <span>Resolved Groups</span>
-                <strong>{result.totalCount}</strong>
+                <strong>{result.total_count}</strong>
               </div>
               <div className="association-summary__row">
                 <span>Identified Names</span>
-                <strong>{result.identifiedCount}</strong>
+                <strong>{result.identified_count}</strong>
               </div>
               <div className="association-summary__row">
                 <span>Cached At</span>
-                <strong>{formatTimestamp(result.cachedAt)}</strong>
+                <strong>{formatTimestamp(result.cached_at)}</strong>
               </div>
             </div>
           ) : (
@@ -267,15 +237,16 @@ export function GetUserGroupsPage() {
             <div className="stack-list">
               {cachedUsers.map((item) => (
                 <button
-                  key={item.userOpid}
+                  key={item.opid}
                   type="button"
                   className="stack-row stack-row--interactive"
-                  onClick={() => setSelectedOpid(item.userOpid)}
+                  onClick={() => setSelectedOpid(item.opid)}
                 >
                   <span className="stack-row__label">
                     <span>
-                      <strong>{item.userOpid}</strong>
-                      <small>{item.totalCount} groups · {formatTimestamp(item.cachedAt)}</small>
+                      <strong>{item.display_name || item.opid}</strong>
+                      <small>{item.opid}{item.email ? ` · ${item.email}` : ''}</small>
+                      <small>{item.total_count} groups · {formatTimestamp(item.cached_at)}</small>
                     </span>
                   </span>
                 </button>

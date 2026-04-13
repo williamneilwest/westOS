@@ -4,7 +4,6 @@ import { useLocation } from 'react-router-dom';
 import { useBackNavigation } from '../../app/hooks/useBackNavigation';
 import {
   getReferenceGroups,
-  getReferenceUsers,
   lookupReferenceGroupsFromFlow,
 } from '../../app/services/api';
 import { STORAGE_KEYS, STORAGE_TTLS } from '../../app/constants/storageKeys';
@@ -12,6 +11,11 @@ import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { SectionHeader } from '../../app/ui/SectionHeader';
 import { storage } from '../../app/utils/storage';
+import {
+  getCachedGroupsForUser,
+  getCachedUsersWithDiagnostics,
+  readUserGroupsCacheMap,
+} from './userGroupsCache';
 
 const SEARCH_HISTORY_KEY = STORAGE_KEYS.GROUP_SEARCH_HISTORY;
 const CLICK_HISTORY_KEY = STORAGE_KEYS.GROUP_CLICKS;
@@ -133,6 +137,25 @@ export function UserGroupAssociationPage() {
   const [flowMessage, setFlowMessage] = useState('');
   const [searchHistory, setSearchHistory] = useState({});
   const [clickedGroups, setClickedGroups] = useState({});
+  const [cacheUsersLoaded, setCacheUsersLoaded] = useState(0);
+
+  function debugLog(message, payload = {}) {
+    if (typeof import.meta !== 'undefined' && import.meta?.env?.DEV) {
+      console.info(`[UserGroupAssociation] ${message}`, payload);
+    }
+  }
+
+  function mergeGroups(baseGroups = [], additionalGroups = []) {
+    const merged = new Map();
+    [...baseGroups, ...additionalGroups].forEach((group) => {
+      const id = String(group?.id || '').trim();
+      if (!id) {
+        return;
+      }
+      merged.set(id, { id, name: String(group?.name || id).trim() || id });
+    });
+    return Array.from(merged.values());
+  }
 
   useEffect(() => {
     setSearchHistory(readStoredObject(SEARCH_HISTORY_KEY));
@@ -147,17 +170,35 @@ export function UserGroupAssociationPage() {
       setError('');
 
       try {
-        const [usersResult, groupsResult] = await Promise.all([getReferenceUsers(), getReferenceGroups()]);
+        const cacheMap = readUserGroupsCacheMap();
+        const { users: cachedUsers, fallbackCount } = getCachedUsersWithDiagnostics(cacheMap);
+        const cachedGroups = cachedUsers.flatMap((user) => user.groups || []);
 
         if (!isMounted) {
           return;
         }
 
-        const nextUsers = Array.isArray(usersResult) ? usersResult : [];
-        const nextGroups = Array.isArray(groupsResult) ? groupsResult : [];
-        setUsers(nextUsers);
-        setGroups(nextGroups);
-        setSelectedUserId((current) => current || nextUsers[0]?.id || '');
+        setUsers(cachedUsers);
+        setCacheUsersLoaded(cachedUsers.length);
+        setGroups(mergeGroups([], cachedGroups));
+        setSelectedUserId((current) => current || cachedUsers[0]?.opid || '');
+        debugLog('Loaded cached users', {
+          loadedCount: cachedUsers.length,
+          fallbackCount,
+        });
+
+        setLoading(false);
+
+        try {
+          const groupsResult = await getReferenceGroups();
+          if (!isMounted) {
+            return;
+          }
+          const referenceGroups = Array.isArray(groupsResult) ? groupsResult : [];
+          setGroups((current) => mergeGroups(current, referenceGroups));
+        } catch {
+          // Cache-first UX: keep page usable even if reference groups endpoint is unavailable.
+        }
       } catch (requestError) {
         if (isMounted) {
           setError(requestError.message || 'Reference data could not be loaded.');
@@ -176,13 +217,30 @@ export function UserGroupAssociationPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!selectedUserId) {
+      setSelectedGroupIds([]);
+      return;
+    }
+
+    const cacheMap = readUserGroupsCacheMap();
+    const cachedGroupIds = getCachedGroupsForUser(selectedUserId, cacheMap).map((group) => group.id);
+    const selectedSet = new Set(cachedGroupIds);
+    setSelectedGroupIds(cachedGroupIds);
+    setGroups((current) => mergeGroups(current, getCachedGroupsForUser(selectedUserId, cacheMap)));
+    debugLog('Selected user hydrated from cache', {
+      opid: selectedUserId,
+      groupsCount: selectedSet.size,
+    });
+  }, [selectedUserId]);
+
   const topSearchTerms = useMemo(
     () => rankEntries(searchHistory, 5).map(([term]) => term),
     [searchHistory]
   );
 
   const selectedUser = useMemo(
-    () => users.find((user) => user.id === selectedUserId) || null,
+    () => users.find((user) => user.opid === selectedUserId) || null,
     [selectedUserId, users]
   );
 
@@ -195,7 +253,7 @@ export function UserGroupAssociationPage() {
     const query = normalizeSearch(userQuery);
     const items = query
       ? users.filter((user) =>
-          [user.id, user.name, user.email].some((value) => normalizeSearch(value).includes(query))
+          [user.opid, user.display_name, user.email].some((value) => normalizeSearch(value).includes(query))
         )
       : users;
     return items.slice(0, 12);
@@ -238,7 +296,16 @@ export function UserGroupAssociationPage() {
   }, [clickedGroups, groupQuery, groups, selectedGroupIds]);
 
   const generatedScript = useMemo(
-    () => buildAssociationScript(selectedUser, selectedGroups),
+    () => buildAssociationScript(
+      selectedUser
+        ? {
+            id: selectedUser.opid,
+            name: selectedUser.display_name || selectedUser.opid,
+            email: selectedUser.email || '',
+          }
+        : null,
+      selectedGroups
+    ),
     [selectedGroups, selectedUser]
   );
 
@@ -295,13 +362,7 @@ export function UserGroupAssociationPage() {
       const items = Array.isArray(result.items) ? result.items : [];
 
       setGroups((current) => {
-        const merged = new Map(current.map((group) => [group.id, group]));
-        items.forEach((group) => {
-          if (group?.id) {
-            merged.set(group.id, group);
-          }
-        });
-        return Array.from(merged.values());
+        return mergeGroups(current, items);
       });
 
       rememberSearchTerm(query);
@@ -333,7 +394,7 @@ export function UserGroupAssociationPage() {
         <EmptyState
           icon={<UsersRound size={20} />}
           title="Loading reference data"
-          description={error || 'Fetching cached users and groups for the association workspace.'}
+          description={error || 'Fetching cached users and cached groups for the association workspace.'}
         />
       </section>
     );
@@ -355,6 +416,7 @@ export function UserGroupAssociationPage() {
       {error ? <p className="status-text status-text--error">{error}</p> : null}
       {copyMessage ? <p className="status-text">{copyMessage}</p> : null}
       {flowMessage ? <p className="status-text">{flowMessage}</p> : null}
+      {!error ? <p className="status-text">{`Loaded ${cacheUsersLoaded} cached user${cacheUsersLoaded === 1 ? '' : 's'} from Get User Groups cache.`}</p> : null}
 
       <div className="work-layout association-layout">
         <div className="card-grid association-column">
@@ -362,7 +424,7 @@ export function UserGroupAssociationPage() {
             <CardHeader
               eyebrow="Step 1"
               title="Select User"
-              description="Search the cached reference users and choose the identity the association run should target."
+              description="Search cached users from Get User Groups and choose the identity the association run should target."
             />
 
             <div className="settings-form">
@@ -372,7 +434,7 @@ export function UserGroupAssociationPage() {
                   type="text"
                   value={userQuery}
                   onChange={(event) => setUserQuery(event.target.value)}
-                  placeholder="Search by id, name, or email"
+                  placeholder="Search by OPID, name, or email"
                 />
               </label>
             </div>
@@ -380,16 +442,17 @@ export function UserGroupAssociationPage() {
             <div className="association-list" role="list" aria-label="Reference users">
               {filteredUsers.length ? (
                 filteredUsers.map((user) => {
-                  const isSelected = user.id === selectedUserId;
+                  const isSelected = user.opid === selectedUserId;
                   return (
                     <button
                       type="button"
-                      key={user.id}
+                      key={user.opid}
                       className={isSelected ? 'association-list__item association-list__item--selected' : 'association-list__item'}
-                      onClick={() => setSelectedUserId(user.id)}
+                      onClick={() => setSelectedUserId(user.opid)}
                     >
-                      <span className="association-list__title">{user.name || user.id}</span>
-                      <span className="association-list__meta">{user.email || user.id}</span>
+                      <span className="association-list__title">{user.display_name || user.opid}</span>
+                      <span className="association-list__meta">{user.opid}</span>
+                      {user.email ? <span className="association-list__meta">{user.email}</span> : null}
                     </button>
                   );
                 })
@@ -397,7 +460,7 @@ export function UserGroupAssociationPage() {
                 <EmptyState
                   icon={<Search size={18} />}
                   title="No matching users"
-                  description="Adjust the search or load additional users into the reference cache first."
+                  description="Adjust the search or run Get User Groups to add users to cache."
                 />
               )}
             </div>
@@ -407,7 +470,7 @@ export function UserGroupAssociationPage() {
             <CardHeader
               eyebrow="Step 2"
               title="Select Groups"
-              description="Filter cached groups locally, or manually call Power Automate to fetch and cache new results."
+              description="Cached groups for the selected user load immediately. Use Power Automate only when you need additional results."
             />
 
             <div className="settings-form">
@@ -473,11 +536,19 @@ export function UserGroupAssociationPage() {
                   );
                 })
               ) : (
-                <EmptyState
-                  icon={<Search size={18} />}
-                  title="No matching groups"
-                  description="Adjust the search or use the Power Automate button to fetch additional groups."
-                />
+                selectedUser ? (
+                  <EmptyState
+                    icon={<Search size={18} />}
+                    title="No cached groups for this user"
+                    description="Use Search Power Automate to fetch additional groups when needed."
+                  />
+                ) : (
+                  <EmptyState
+                    icon={<Search size={18} />}
+                    title="No matching groups"
+                    description="Select a cached user first, or use the Power Automate button to fetch additional groups."
+                  />
+                )
               )}
             </div>
           </Card>
@@ -499,7 +570,7 @@ export function UserGroupAssociationPage() {
             <div className="association-summary">
               <div className="association-summary__row">
                 <span>User</span>
-                <strong>{selectedUser ? selectedUser.name || selectedUser.id : 'Select a user'}</strong>
+                <strong>{selectedUser ? selectedUser.display_name || selectedUser.opid : 'Select a user'}</strong>
               </div>
               <div className="association-summary__row">
                 <span>Email</span>
