@@ -210,7 +210,17 @@ def resolve_prompt(agent_id, user_input, context=None):
     return template.replace("{{input}}", input_text).replace("{{context}}", context_text)
 
 
+def _enforce_manual_ai_guard(payload):
+    if not isinstance(payload, dict):
+        return
+
+    input_data = payload.get('input_data')
+    if isinstance(input_data, list) and len(input_data) > 1:
+        raise ValueError('Blocked: bulk dataset AI analysis is not allowed')
+
+
 def call_gateway_chat(payload, gateway_base_url, timeout_seconds=DEFAULT_REQUEST_TIMEOUT, agent_id=None, context=None):
+    _enforce_manual_ai_guard(payload)
     if not str(gateway_base_url or "").strip():
         raise RequestException('AI gateway is not configured.')
     if has_app_context() and not current_app.config.get('USE_AI_GATEWAY', False):
@@ -329,6 +339,7 @@ def build_health_payload(app_name, model, api_base, use_ai_gateway):
 
 def send_chat(payload, timeout_seconds=DEFAULT_REQUEST_TIMEOUT):
     request_payload = payload if isinstance(payload, dict) else {}
+    _enforce_manual_ai_guard(request_payload)
     gateway_base_url = ''
     if has_app_context():
         gateway_base_url = str(current_app.config.get('AI_GATEWAY_BASE_URL') or '').strip()

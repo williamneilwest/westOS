@@ -216,13 +216,13 @@ export function getMostAccessedKnowledgeBase(limit = 30) {
   return request(backendBaseUrl, `/api/kb/most-accessed?${params.toString()}`);
 }
 
-export function analyzeDocument(filePath) {
-  return request(backendBaseUrl, '/api/documents/analyze', {
+export function analyzeDocument(filePath, agentId = 'kb_ingestion') {
+  return request(backendBaseUrl, '/api/analyze/document', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ filePath })
+    body: JSON.stringify({ file_path: filePath, agent_id: agentId })
   });
 }
 

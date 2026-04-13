@@ -2,6 +2,7 @@ import json
 import os
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 from requests import RequestException
 from requests.exceptions import Timeout
@@ -16,6 +17,7 @@ from ..services.ai_client import (
     build_openai_chat_response,
     call_gateway_chat,
     call_gateway_openai_chat,
+    send_chat,
 )
 from ..services.ai_interaction_log import read_ai_interactions, write_ai_interaction_error
 from ..services.document_ai import analyze_document
@@ -164,9 +166,43 @@ def _write_analysis_metadata(file_path, payload):
         current_app.logger.warning('Failed to write AI analysis metadata for %s', file_path)
 
 
+def _resolve_analysis_file_path(file_path):
+    raw_value = str(file_path or '').strip()
+    if not raw_value:
+        return ''
+
+    path_only = re.sub(r'^https?://[^/]+', '', raw_value).split('?', 1)[0]
+    if path_only.startswith(('/uploads/', '/api/uploads/', '/kb/', '/api/kb/')):
+        return _extract_document_path(path_only)
+
+    candidate = Path(raw_value).expanduser()
+    base_dir = Path(current_app.config.get('BACKEND_DATA_DIR', '/app/data')).resolve()
+    if not candidate.is_absolute():
+        candidate = (base_dir / raw_value.lstrip('/')).resolve()
+    else:
+        candidate = candidate.resolve()
+
+    allowed_roots = [
+        base_dir / 'uploads',
+        base_dir / 'kb',
+        base_dir / 'csv_analyses',
+        base_dir / 'work' / 'kb',
+    ]
+    for root in allowed_roots:
+        try:
+            candidate.relative_to(root.resolve())
+            return str(candidate)
+        except ValueError:
+            continue
+
+    return ''
+
+
 def _run_smart_analysis(payload):
     ai_settings = get_ai_settings(defaults=_default_ai_settings())
     prepared = prepare_analysis_request(payload, settings=ai_settings)
+    if prepared.get('mode') == 'full_dataset' and int(prepared.get('recordCount') or 0) > 1:
+        raise ValueError('Blocked: bulk dataset AI analysis is not allowed')
     selected_agent_id = str(payload.get('agent_id') or '').strip()
     if selected_agent_id and prepared.get('cacheKey'):
         prepared['cacheKey'] = f"{prepared['cacheKey']}::{selected_agent_id}"
@@ -384,6 +420,39 @@ def health():
             use_ai_gateway=True,
         )
     )
+
+
+@ai_bp.post('/api/analyze/document')
+def analyze_document_manual():
+    payload = request.get_json(silent=True) or {}
+    file_path = str(payload.get('file_path') or payload.get('filePath') or '').strip()
+    agent_id = str(payload.get('agent_id') or payload.get('agentId') or 'kb_ingestion').strip() or 'kb_ingestion'
+
+    resolved_path = _resolve_analysis_file_path(file_path)
+    if not resolved_path:
+        return jsonify({'error': 'A valid file_path within data directories is required.'}), 400
+    if not os.path.isfile(resolved_path):
+        return jsonify({'error': 'Document file not found.'}), 404
+
+    extracted = parse_document(resolved_path) or {}
+    document_text = str(extracted.get('text') or '').strip()
+    if not document_text:
+        return jsonify({'error': 'No text could be extracted from this file.'}), 400
+
+    print('[AI] Triggered manually by user')
+    result = send_chat(
+        {
+            'message': 'Analyze this document for KB ingestion',
+            'agent_id': agent_id,
+            'context': {
+                'document_text': document_text,
+                'file_name': Path(resolved_path).name,
+            },
+            'analysis_mode': 'document_processing',
+        },
+        timeout_seconds=(5, 60),
+    )
+    return jsonify({'success': True, 'data': result})
 
 
 @ai_bp.post('/api/ai/analyze-document')
