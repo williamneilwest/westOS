@@ -4689,6 +4689,75 @@ textarea {
   backdrop-filter: blur(6px);
 }
 
+.edit-dataset-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+}
+
+.edit-dataset-drawer {
+  width: min(42vw, 560px);
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.9rem;
+  padding: 1rem;
+  background: var(--bg-panel-strong);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.edit-dataset-drawer__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.edit-dataset-drawer__header h3 {
+  margin: 0.7rem 0 0;
+  font-family: "Space Grotesk", "Inter", sans-serif;
+}
+
+.edit-dataset-drawer__header p {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+}
+
+.edit-dataset-drawer__content {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 0.75rem;
+  padding-right: 0.1rem;
+}
+
+.edit-dataset-details {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.edit-dataset-details__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.edit-dataset-details__row span {
+  color: var(--text-soft);
+  font-size: 0.8rem;
+}
+
+.edit-dataset-details__row strong {
+  text-align: right;
+  word-break: break-word;
+}
+
 .row-detail-drawer {
   width: min(60vw, 980px);
   height: 100%;
@@ -6591,6 +6660,10 @@ textarea {
     width: min(76vw, 980px);
   }
 
+  .edit-dataset-drawer {
+    width: min(68vw, 540px);
+  }
+
   .ticket-detail-layout {
     grid-template-columns: 1fr;
   }
@@ -6635,6 +6708,8 @@ textarea {
 
   .row-detail-backdrop,
   .row-detail-drawer,
+  .edit-dataset-backdrop,
+  .edit-dataset-drawer,
   .dataset-panel {
     position: static;
   }
@@ -6976,6 +7051,8 @@ textarea {
 
   .row-detail-backdrop,
   .row-detail-drawer,
+  .edit-dataset-backdrop,
+  .edit-dataset-drawer,
   .ticket-notes-card,
   .readme-toc,
   .dataset-panel {
@@ -6983,6 +7060,13 @@ textarea {
   }
 
   .row-detail-backdrop {
+    inset: auto;
+    display: block;
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  .edit-dataset-backdrop {
     inset: auto;
     display: block;
     background: transparent;
@@ -7001,6 +7085,11 @@ textarea {
   }
 
   .row-detail-drawer {
+    width: 100%;
+    padding: 0.85rem;
+  }
+
+  .edit-dataset-drawer {
     width: 100%;
     padding: 0.85rem;
   }

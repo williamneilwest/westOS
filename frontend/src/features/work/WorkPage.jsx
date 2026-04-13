@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileSpreadsheet,
+  History,
   MessageSquareText,
+  SlidersHorizontal,
   Tag,
+  Upload,
   X,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -25,6 +28,7 @@ import { ErrorBoundary } from '../../app/ui/ErrorBoundary';
 import { getStoredVisibleColumns, setStoredVisibleColumns } from '../tables/tableUtils';
 import { DataTable } from '../../components/dataset/DataTable';
 import { DataCardList } from '../../components/dataset/DataCardList';
+import { ColumnSelectorDropdown } from '../../components/dataset/ColumnSelectorDropdown';
 import {
   compareValues,
   detectTicketColumn,
@@ -173,7 +177,14 @@ function formatUploadTimestamp(value) {
 }
 
 function formatUploadSource(value) {
-  return String(value || '').trim().toLowerCase() === 'email' ? 'Email upload' : 'Manual upload';
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'email') {
+    return 'Email upload';
+  }
+  if (normalized === 'saved_analysis') {
+    return 'Recent run';
+  }
+  return 'Manual upload';
 }
 
 function getDefaultVisibleColumns(analysis) {
@@ -376,6 +387,7 @@ export function WorkPage() {
   );
   const [latestFileName, setLatestFileName] = useState(initialDataset?.fileName || '');
   const [latestLastUpdated, setLatestLastUpdated] = useState(initialDataset?.lastUpdated || null);
+  const [latestSource, setLatestSource] = useState(initialDataset?.source || '');
   const [latestMessage, setLatestMessage] = useState('');
   const [datasetView, setDatasetView] = useState(() => {
     const stored = String(storage.get(VIEW_STORAGE_KEY) || '').toLowerCase();
@@ -402,6 +414,7 @@ export function WorkPage() {
   const [loadingAI, setLoadingAI] = useState(false);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const [isUploadsExpanded, setIsUploadsExpanded] = useState(false);
+  const [isEditDatasetOpen, setIsEditDatasetOpen] = useState(false);
   const [datasetVisibleColumns, setDatasetVisibleColumns] = useState([]);
   const [columnFilters, setColumnFilters] = useState({});
   const [sortConfig, setSortConfig] = useState({ column: '', direction: 'asc' });
@@ -455,18 +468,21 @@ export function WorkPage() {
         analysisId: entry.id,
         fileName: entry.fileName,
         lastUpdated: entry.savedAt || null,
+        source: 'saved_analysis',
         columns: parsedDataset.columns,
         rows: parsedDataset.rows,
       };
       setLatestDataset({ columns: parsedDataset.columns, rows: parsedDataset.rows });
       setLatestFileName(entry.fileName);
       setLatestLastUpdated(entry.savedAt || null);
+      setLatestSource('saved_analysis');
       setLatestMessage('');
       setCachedWorkDataset(nextDataset);
     } catch (requestError) {
       setCachedWorkDataset(null);
       setLatestDataset({ columns: [], rows: [] });
       setLatestLastUpdated(null);
+      setLatestSource('');
       setError(requestError.message || 'Saved CSV data could not be loaded.');
     } finally {
       if (showLoading) {
@@ -584,6 +600,7 @@ export function WorkPage() {
         const nextDataset = {
           fileName,
           lastUpdated: latestTicketsPayload?.last_updated || null,
+          source: latestTicketsPayload?.source || '',
           columns,
           rows,
         };
@@ -592,6 +609,7 @@ export function WorkPage() {
         setLatestDataset({ columns, rows });
         setLatestFileName(fileName);
         setLatestLastUpdated(latestTicketsPayload?.last_updated || null);
+        setLatestSource(String(latestTicketsPayload?.source || '').trim());
         setLatestMessage(String(latestTicketsPayload?.message || '').trim());
         setAutoMetrics(
           latestTicketsPayload?.metrics && typeof latestTicketsPayload.metrics === 'object'
@@ -608,6 +626,7 @@ export function WorkPage() {
         setLatestDataset({ columns: [], rows: [] });
         setLatestFileName(ACTIVE_TICKETS_FIXED_FILE);
         setLatestLastUpdated(null);
+        setLatestSource('');
         setAutoMetrics({ total: 0, flagged: 0, visible_columns: 0, open: 0 });
         setAutoTodo([]);
         setError(requestError.message || 'Active Tickets dataset could not be loaded.');
@@ -624,6 +643,21 @@ export function WorkPage() {
       isMounted = false;
     };
   }, [isActiveTicketsRoute, user?.username]);
+
+  useEffect(() => {
+    if (!isEditDatasetOpen) {
+      return undefined;
+    }
+
+    function onKeyDown(event) {
+      if (event.key === 'Escape') {
+        setIsEditDatasetOpen(false);
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isEditDatasetOpen]);
 
   useEffect(() => {
     if (!recentAnalyses.length || isLoadingSavedRun || latestFileName || csvUploads.length) {
@@ -943,12 +977,14 @@ export function WorkPage() {
         analysisId: result.data.analysisId,
         fileName: result.data.fileName,
         lastUpdated: result.data.savedAt || new Date().toISOString(),
+        source: 'manual',
         columns: parsedDataset.columns,
         rows: parsedDataset.rows,
       };
       setLatestDataset({ columns: parsedDataset.columns, rows: parsedDataset.rows });
       setLatestFileName(result.data.fileName);
       setLatestLastUpdated(result.data.savedAt || new Date().toISOString());
+      setLatestSource('manual');
       setLatestMessage('');
       setCachedWorkDataset(nextDataset);
       setSelectedRow(null);
@@ -1002,6 +1038,7 @@ export function WorkPage() {
       const nextDataset = {
         fileName: file.filename,
         lastUpdated: file.modifiedAt || new Date().toISOString(),
+        source: file.source || 'manual',
         columns: parsedDataset.columns,
         rows: parsedDataset.rows,
       };
@@ -1010,6 +1047,7 @@ export function WorkPage() {
       setLatestDataset({ columns: parsedDataset.columns, rows: parsedDataset.rows });
       setLatestFileName(file.filename);
       setLatestLastUpdated(file.modifiedAt || new Date().toISOString());
+      setLatestSource(file.source || 'manual');
       setLatestMessage(parsedDataset.rows.length ? '' : 'The selected upload contains no data rows.');
       setCachedWorkDataset(nextDataset);
       setSelectedRow(null);
@@ -1223,10 +1261,20 @@ export function WorkPage() {
                     Metrics
                   </button>
                 </div>
+                <button
+                  className={isEditDatasetOpen ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+                  onClick={() => setIsEditDatasetOpen(true)}
+                  type="button"
+                >
+                  <SlidersHorizontal size={14} />
+                  Edit Dataset
+                </button>
               </>
             )}
             uploadDisabled={!authenticated}
             uploadDisabledReason="Sign in to use this feature"
+            showChangeDatasetSection={false}
+            showColumnSelector={false}
           >
             <section className="analysis-grid">
               <Card className="analysis-grid__wide">
@@ -1347,6 +1395,146 @@ export function WorkPage() {
               </Card>
             </section>
           </DatasetPage>
+
+          {isEditDatasetOpen ? (
+            <div className="edit-dataset-backdrop" onClick={() => setIsEditDatasetOpen(false)} role="presentation">
+              <aside
+                aria-label="Edit dataset"
+                className="edit-dataset-drawer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="edit-dataset-drawer__header">
+                  <div>
+                    <span className="ui-eyebrow">Dataset Manager</span>
+                    <h3>Edit Dataset</h3>
+                    <p>Changes here affect the current active dataset configuration.</p>
+                  </div>
+                  <button className="compact-toggle compact-toggle--icon" onClick={() => setIsEditDatasetOpen(false)} type="button">
+                    <X size={15} />
+                  </button>
+                </div>
+
+                <div className="edit-dataset-drawer__content">
+                  <section className="dataset-panel__section">
+                    <div className="dataset-panel__section-header">
+                      <h4>Dataset Actions</h4>
+                    </div>
+                    <div className="dataset-panel__action-grid">
+                      <button
+                        className="compact-toggle dataset-panel__action"
+                        onClick={() => fileInputRef.current?.click()}
+                        type="button"
+                        disabled={!authenticated}
+                        title={!authenticated ? 'Sign in to use this feature' : ''}
+                      >
+                        <Upload size={15} />
+                        Upload New File
+                      </button>
+                      <button
+                        className={isHistoryExpanded ? 'compact-toggle compact-toggle--active dataset-panel__action' : 'compact-toggle dataset-panel__action'}
+                        onClick={() => {
+                          setIsHistoryExpanded((current) => !current);
+                          setIsUploadsExpanded(false);
+                        }}
+                        type="button"
+                      >
+                        <History size={15} />
+                        Choose Recent Run
+                      </button>
+                      <button
+                        className={isUploadsExpanded ? 'compact-toggle compact-toggle--active dataset-panel__action' : 'compact-toggle dataset-panel__action'}
+                        onClick={() => {
+                          setIsUploadsExpanded((current) => !current);
+                          setIsHistoryExpanded(false);
+                        }}
+                        type="button"
+                      >
+                        <FileSpreadsheet size={15} />
+                        Choose Upload
+                      </button>
+                    </div>
+                  </section>
+
+                  <section className="dataset-panel__section">
+                    <div className="dataset-panel__section-header">
+                      <h4>Dataset Details</h4>
+                    </div>
+                    <div className="edit-dataset-details">
+                      <div className="edit-dataset-details__row"><span>File</span><strong>{formatDataFileName(latestFileName) || 'Unknown'}</strong></div>
+                      <div className="edit-dataset-details__row"><span>Source</span><strong>{formatUploadSource(latestSource || 'manual')}</strong></div>
+                      <div className="edit-dataset-details__row"><span>Last uploaded</span><strong>{formatUploadTimestamp(latestLastUpdated)}</strong></div>
+                      <div className="edit-dataset-details__row"><span>Rows</span><strong>{latestDataset?.rows?.length || 0}</strong></div>
+                      <div className="edit-dataset-details__row"><span>Columns</span><strong>{datasetColumns.length}</strong></div>
+                    </div>
+                  </section>
+
+                  <section className="dataset-panel__section">
+                    <div className="dataset-panel__section-header">
+                      <h4>Display Settings</h4>
+                    </div>
+                    <ColumnSelectorDropdown
+                      columns={datasetColumns}
+                      visibleColumns={datasetVisibleColumns}
+                      onChange={handleDatasetVisibleColumnsChange}
+                      lockedColumns={ticketColumn ? [ticketColumn] : []}
+                    />
+                    <small className="status-text">{`${datasetVisibleColumns.length} of ${datasetColumns.length} columns visible`}</small>
+                  </section>
+
+                  {isHistoryExpanded ? (
+                    <section className="dataset-panel__section">
+                      <div className="dataset-panel__section-header"><h4>Recent Runs</h4></div>
+                      {recentAnalyses?.length ? (
+                        <div className="stack-list">
+                          {recentAnalyses.map((entry) => (
+                            <button key={entry.id} className="stack-row stack-row--interactive" onClick={() => handleRecentRunSelection(entry)} type="button">
+                              <span className="stack-row__label">
+                                <History size={16} />
+                                <span>
+                                  <strong>{formatDataFileName(entry.fileName)}</strong>
+                                  <small>{new Date(entry.savedAt).toLocaleString()}</small>
+                                </span>
+                              </span>
+                              <strong>{entry.analysis?.rowCount || 0} rows</strong>
+                            </button>
+                          ))}
+                        </div>
+                      ) : isLoadingRecent ? (
+                        <div className="skeleton-stack"><div className="skeleton-line" /><div className="skeleton-line" /></div>
+                      ) : (
+                        <EmptyState icon={<History size={20} />} title="No saved analyses yet" description="Analyze a dataset once and recent runs will appear here." />
+                      )}
+                    </section>
+                  ) : null}
+
+                  {isUploadsExpanded ? (
+                    <section className="dataset-panel__section">
+                      <div className="dataset-panel__section-header"><h4>Uploaded Files</h4></div>
+                      {csvUploads?.length ? (
+                        <div className="stack-list">
+                          {csvUploads.map((file) => (
+                            <button key={file.filename} className="stack-row stack-row--interactive" onClick={() => void handleUploadedFileSelection(file)} type="button">
+                              <span className="stack-row__label">
+                                <Upload size={16} />
+                                <span>
+                                  <strong>{formatDataFileName(file.filename)}</strong>
+                                  <small>{file.modifiedAt || file.url || 'Uploaded source'}</small>
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : isLoadingUploads ? (
+                        <div className="skeleton-stack"><div className="skeleton-line" /><div className="skeleton-line" /></div>
+                      ) : (
+                        <EmptyState icon={<Upload size={20} />} title="No uploads yet" description="Upload files to reuse them in dataset views." />
+                      )}
+                    </section>
+                  ) : null}
+                </div>
+              </aside>
+            </div>
+          ) : null}
 
           {rowDetail ? (
             <div className="row-detail-backdrop" onClick={() => setSelectedRow(null)} role="presentation">
