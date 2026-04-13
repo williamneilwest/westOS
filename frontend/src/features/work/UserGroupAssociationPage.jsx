@@ -26,6 +26,20 @@ function normalizeSearch(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function isValidGroupId(value) {
+  const id = String(value || '').trim().toLowerCase();
+  if (!id) {
+    return false;
+  }
+  if (id.includes('$metadata')) {
+    return false;
+  }
+  if (id.startsWith('https://graph.microsoft.com')) {
+    return false;
+  }
+  return true;
+}
+
 function readStoredObject(key) {
   const parsed = storage.getWithTTL(key);
   return parsed && typeof parsed === 'object' ? parsed : {};
@@ -54,30 +68,25 @@ function updateCounter(record, key, limit) {
 }
 
 function buildAssociationScript(user, groups) {
-  if (!user || !groups.length) {
+  if (!user) {
     return '';
   }
 
-  const groupLines = groups
-    .map((group) => `    @{ id = "${group.id}"; name = "${group.name || group.id}" }`)
-    .join(',\n');
+  if (!groups.length) {
+    return '# Select at least one group to validate membership.';
+  }
+
+  if (groups.every((group) => group.existsInUser)) {
+    return '✅ User already has all selected groups. No action needed.';
+  }
+
+  const missingGroups = groups.filter((group) => !group.existsInUser);
+  const userId = user.id || user.opid || '';
 
   return [
-    '$associationRequest = @{',
-    '  user = @{',
-    `    id = "${user.id}"`,
-    `    name = "${user.name || user.id}"`,
-    `    email = "${user.email || ''}"`,
-    '  }',
-    '  groups = @(',
-    groupLines,
-    '  )',
-    '}',
+    `# Add missing groups for ${userId}`,
     '',
-    'foreach ($group in $associationRequest.groups) {',
-    '  Write-Host ("Associate {0} with {1} ({2})" -f $associationRequest.user.id, $group.name, $group.id)',
-    '  # Invoke your directory or automation step here.',
-    '}',
+    ...missingGroups.map((group) => `Add-UserToGroup -UserId "${userId}" -GroupId "${group.id}"`),
   ].join('\n');
 }
 
@@ -149,10 +158,15 @@ export function UserGroupAssociationPage() {
     const merged = new Map();
     [...baseGroups, ...additionalGroups].forEach((group) => {
       const id = String(group?.id || '').trim();
-      if (!id) {
+      if (!isValidGroupId(id)) {
         return;
       }
-      merged.set(id, { id, name: String(group?.name || id).trim() || id });
+      const providedName = String(group?.name || '').trim();
+      merged.set(id, {
+        id,
+        name: providedName || id,
+        unresolved: !providedName,
+      });
     });
     return Array.from(merged.values());
   }
@@ -249,6 +263,22 @@ export function UserGroupAssociationPage() {
     return groups.filter((group) => selectedIds.has(group.id));
   }, [groups, selectedGroupIds]);
 
+  const membershipValidation = useMemo(() => {
+    const userGroups = Array.isArray(selectedUser?.groups) ? selectedUser.groups : [];
+    const userGroupIds = new Set(
+      userGroups
+        .map((group) => String(group?.id || '').trim())
+        .filter(Boolean)
+    );
+
+    return selectedGroups.map((group) => ({
+      id: group.id,
+      name: group.name || group.id,
+      unresolved: Boolean(group.unresolved),
+      existsInUser: userGroupIds.has(group.id),
+    }));
+  }, [selectedGroups, selectedUser]);
+
   const filteredUsers = useMemo(() => {
     const query = normalizeSearch(userQuery);
     const items = query
@@ -264,6 +294,7 @@ export function UserGroupAssociationPage() {
     const selectedIds = new Set(selectedGroupIds);
 
     const matches = groups
+      .filter((group) => isValidGroupId(group?.id))
       .filter((group) => {
         if (!query) {
           return true;
@@ -304,9 +335,9 @@ export function UserGroupAssociationPage() {
             email: selectedUser.email || '',
           }
         : null,
-      selectedGroups
+      membershipValidation
     ),
-    [selectedGroups, selectedUser]
+    [membershipValidation, selectedUser]
   );
 
   function rememberSearchTerm(term) {
@@ -347,6 +378,11 @@ export function UserGroupAssociationPage() {
   }
 
   async function handleFlowLookup() {
+    if (!selectedUser) {
+      setFlowMessage('Select a user before searching for additional groups.');
+      return;
+    }
+
     const query = groupQuery.trim();
     if (!query) {
       setFlowMessage('Enter a group search term before calling Power Automate.');
@@ -481,6 +517,7 @@ export function UserGroupAssociationPage() {
                   value={groupQuery}
                   onChange={(event) => setGroupQuery(event.target.value)}
                   placeholder="Search by group id or name"
+                  disabled={!selectedUser}
                 />
               </label>
 
@@ -489,7 +526,7 @@ export function UserGroupAssociationPage() {
                   type="button"
                   className="ui-button ui-button--primary"
                   onClick={handleFlowLookup}
-                  disabled={flowLoading}
+                  disabled={flowLoading || !selectedUser}
                 >
                   <Sparkles size={16} />
                   {flowLoading ? 'Searching Power Automate...' : 'Search Power Automate'}
@@ -528,10 +565,7 @@ export function UserGroupAssociationPage() {
                       onClick={() => toggleGroup(group.id)}
                     >
                       <span className="association-list__title">{group.name || group.id}</span>
-                      <span className="association-list__meta">
-                        {group.id}
-                        {clickCount ? ` · opened ${clickCount}x` : ''}
-                      </span>
+                      <span className="association-list__meta">{clickCount ? `opened ${clickCount}x` : 'cached group'}</span>
                     </button>
                   );
                 })
@@ -545,8 +579,8 @@ export function UserGroupAssociationPage() {
                 ) : (
                   <EmptyState
                     icon={<Search size={18} />}
-                    title="No matching groups"
-                    description="Select a cached user first, or use the Power Automate button to fetch additional groups."
+                    title="No user selected"
+                    description="Select a cached user first to validate group membership."
                   />
                 )
               )}
@@ -577,20 +611,34 @@ export function UserGroupAssociationPage() {
                 <strong>{selectedUser?.email || 'No email in cache'}</strong>
               </div>
               <div className="association-summary__row">
-                <span>Groups</span>
-                <strong>{selectedGroups.length}</strong>
+                <span>Selected Groups</span>
+                <strong>{membershipValidation.length}</strong>
               </div>
             </div>
 
-            <div className="association-chip-list">
-              {selectedGroups.length ? (
-                selectedGroups.map((group) => (
-                  <span className="association-chip" key={group.id}>
-                    {group.name || group.id}
-                  </span>
-                ))
+            <div className="association-validation">
+              <div className="association-validation__header">
+                <span>Group Name</span>
+                <span>Status</span>
+              </div>
+              {membershipValidation.length ? (
+                <div className="association-validation__list">
+                  {membershipValidation.map((group) => (
+                    <div className="association-validation__row" key={group.id}>
+                      <span title={group.id}>
+                        {group.name}
+                        {group.unresolved ? ' (unresolved)' : ''}
+                      </span>
+                      <span className={group.existsInUser ? 'association-status association-status--assigned' : 'association-status association-status--missing'}>
+                        {group.existsInUser ? 'Already Assigned' : 'Not Assigned'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <p className="ui-card__description">No groups selected yet.</p>
+                <p className="ui-card__description">
+                  {selectedUser ? 'No groups selected. Choose one or more groups to validate.' : 'Select a user to begin validation.'}
+                </p>
               )}
             </div>
           </Card>
@@ -605,7 +653,7 @@ export function UserGroupAssociationPage() {
                   type="button"
                   className="ui-button ui-button--secondary"
                   onClick={handleCopyScript}
-                  disabled={!generatedScript}
+                  disabled={!selectedUser}
                 >
                   <Clipboard size={16} />
                   Copy
@@ -618,8 +666,10 @@ export function UserGroupAssociationPage() {
                 className="association-script association-script--fit"
                 readOnly
                 value={
-                  generatedScript ||
-                  '# Select one user and at least one group to generate the association script.'
+                  generatedScript
+                  || (!selectedUser
+                    ? '# Select a user first.'
+                    : '# Select one or more groups to validate and generate script output.')
                 }
               />
             </div>

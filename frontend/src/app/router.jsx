@@ -252,7 +252,7 @@ export const router = createBrowserRouter(
   },
   {
     path: '/tickets',
-    element: isWorkSubdomain ? <AppShell /> : <RequireAuth><AppShell /></RequireAuth>,
+    element: <AppShell />,
     children: [
       {
         path: ':ticketId',

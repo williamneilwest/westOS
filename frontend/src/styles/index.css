@@ -6437,6 +6437,61 @@ textarea {
   max-height: min(42vh, 420px);
 }
 
+.association-validation {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.association-validation__header,
+.association-validation__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.association-validation__header {
+  color: var(--text-soft);
+  font-size: 0.84rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.association-validation__list {
+  max-height: min(34vh, 360px);
+  overflow: auto;
+  padding-right: 0.25rem;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.association-validation__row {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.association-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.association-status--assigned {
+  color: #9cf7e7;
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.association-status--missing {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.22);
+}
+
 .reference-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
