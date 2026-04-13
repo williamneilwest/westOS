@@ -15,7 +15,7 @@ import {
   getUploadFile,
   getUploads,
 } from '../../app/services/api';
-import { chatAI } from '../../app/services/aiClient';
+import { chatAI, getFeatureAgentId } from '../../app/services/aiClient';
 import { STORAGE_KEYS } from '../../app/constants/storageKeys';
 import { formatDataFileName } from '../../app/utils/fileDisplay';
 import { storage } from '../../app/utils/storage';
@@ -1044,6 +1044,7 @@ export function WorkPage() {
     try {
       const result = await chatAI({
         analysis_mode: 'preview',
+        agent_id: getFeatureAgentId('ticket_analysis', 'ticket_analyzer'),
         dataset: analysisDataset
           ? {
               fileName: analysisDataset.fileName || analysis.fileName,

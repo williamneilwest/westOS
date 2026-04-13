@@ -6,6 +6,13 @@ const ACTIVE_PATTERNS = [/^active$/i, /is_active/i, /open/i];
 const UPDATED_PATTERNS = [/sys_updated_on/i, /updated/i, /last.?updated/i, /modified/i];
 const PRIMARY_NOTE_COLUMN = 'comments_and_work_notes';
 const SUPPRESSED_COLUMNS = new Set(['comments', 'work_notes']);
+const NOTE_COLUMN_PATTERNS = [
+  /^comments_and_work_notes$/i,
+  /^comments?_and_?work_?notes?$/i,
+  /^comments?\s*and\s*work\s*notes?$/i,
+  /^comments?$/i,
+  /^work_?notes?$/i,
+];
 const IGNORED_NOTE_CONTENTS = new Set(['text has been sent']);
 const ACKNOWLEDGEMENT_PATTERN = /\back?no?w?l?e?d?g(?:e|ed|ement|ing)\b|\backnolwedge\b/i;
 const HELPDESK_THANK_YOU_PATTERN = /thank you (?:for )?(?:placing|submitting) (?:a )?ticket(?: to the helpdesk)?/i;
@@ -80,6 +87,17 @@ function findColumn(columns = [], patterns = []) {
 }
 
 function splitNoteEntries(value) {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => splitNoteEntries(entry));
+  }
+
+  if (value && typeof value === 'object') {
+    const content = normalizeValue(
+      value.content ?? value.value ?? value.text ?? value.body ?? value.message
+    );
+    return content ? splitNoteEntries(content) : [];
+  }
+
   const text = normalizeValue(value);
 
   if (!text) {
@@ -154,7 +172,21 @@ function formatLabel(value) {
 }
 
 export function getTicketColumns(columns = []) {
-  const noteColumns = columns.includes(PRIMARY_NOTE_COLUMN) ? [PRIMARY_NOTE_COLUMN] : [];
+  const detectedNoteColumns = columns.filter((column) =>
+    NOTE_COLUMN_PATTERNS.some((pattern) => pattern.test(normalizeValue(column)))
+  );
+  const orderedNoteColumns = Array.from(
+    new Set(
+      [
+        ...detectedNoteColumns.filter(
+          (column) => normalizeValue(column).toLowerCase() === PRIMARY_NOTE_COLUMN
+        ),
+        ...detectedNoteColumns.filter(
+          (column) => normalizeValue(column).toLowerCase() !== PRIMARY_NOTE_COLUMN
+        ),
+      ]
+    )
+  );
 
   return {
     id: findColumn(columns, ID_PATTERNS),
@@ -163,7 +195,7 @@ export function getTicketColumns(columns = []) {
     status: findColumn(columns, STATUS_PATTERNS),
     active: findColumn(columns, ACTIVE_PATTERNS),
     updated: findColumn(columns, UPDATED_PATTERNS),
-    noteColumns,
+    noteColumns: orderedNoteColumns,
   };
 }
 

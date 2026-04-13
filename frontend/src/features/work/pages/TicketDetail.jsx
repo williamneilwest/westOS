@@ -3,7 +3,7 @@ import { ArrowLeft, Clock3, MessageSquareText, ShieldCheck, ShieldX, Sparkles, U
 import { useLocation, useParams } from 'react-router-dom';
 import { useBackNavigation } from '../../../app/hooks/useBackNavigation';
 import { getKnowledgeBase, getReferenceGroups, getReferenceUsers, getTicket, getUserGroups } from '../../../app/services/api';
-import { chatAI } from '../../../app/services/aiClient';
+import { chatAI, getFeatureAgentId } from '../../../app/services/aiClient';
 import { Card, CardHeader } from '../../../app/ui/Card';
 import { EmptyState } from '../../../app/ui/EmptyState';
 import { getCachedWorkDataset, setCachedWorkDataset } from '../workDatasetCache';
@@ -409,6 +409,7 @@ export function TicketDetail() {
     try {
       const result = await chatAI({
         analysis_mode: 'deep',
+        agent_id: getFeatureAgentId('ticket_analysis', 'ticket_analyzer'),
         ticket,
         fileName: dataset?.fileName,
       });

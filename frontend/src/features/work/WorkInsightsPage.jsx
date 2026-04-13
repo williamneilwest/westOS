@@ -3,7 +3,7 @@ import { AlertTriangle, Clock3, FolderKanban, MessageSquareText, Tags, UserRound
 import { useLocation } from 'react-router-dom';
 import { useBackNavigation } from '../../app/hooks/useBackNavigation';
 import { useCurrentUser } from '../../app/hooks/useCurrentUser';
-import { chatAI } from '../../app/services/aiClient';
+import { chatAI, getFeatureAgentId } from '../../app/services/aiClient';
 import { getLatestTickets } from '../../app/services/api';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { SectionHeader } from '../../app/ui/SectionHeader';
@@ -115,6 +115,7 @@ export function WorkInsightsPage() {
     try {
       const result = await chatAI({
         analysis_mode: 'full_dataset',
+        agent_id: getFeatureAgentId('ticket_analysis', 'ticket_analyzer'),
         dataset: {
           fileName: dataset.fileName,
           columns: dataset.columns,

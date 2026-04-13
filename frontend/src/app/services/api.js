@@ -363,6 +363,36 @@ export function updateAISettings(data) {
   });
 }
 
+export function getAgents() {
+  return request(backendBaseUrl, '/api/agents');
+}
+
+export function createAgent(data) {
+  return request(backendBaseUrl, '/api/agents', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data || {})
+  });
+}
+
+export function updateAgent(agentId, data) {
+  return request(backendBaseUrl, `/api/agents/${encodeURIComponent(agentId)}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data || {})
+  });
+}
+
+export function deleteAgent(agentId) {
+  return request(backendBaseUrl, `/api/agents/${encodeURIComponent(agentId)}`, {
+    method: 'DELETE'
+  });
+}
+
 export async function updateAiSettings(model) {
   const current = await getAISettings();
 
@@ -382,6 +412,11 @@ export function sendAiChat(messageOrPayload) {
     typeof messageOrPayload === 'string'
       ? { message: messageOrPayload }
       : { ...(messageOrPayload || {}) };
+
+  if (payload.agentId && !payload.agent_id) {
+    payload.agent_id = payload.agentId;
+  }
+  delete payload.agentId;
 
   return request(aiBaseUrl, '/api/ai/chat', {
     method: 'POST',

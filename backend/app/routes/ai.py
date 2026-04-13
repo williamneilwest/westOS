@@ -56,9 +56,14 @@ def _gateway_payload(payload):
     return next_payload
 
 
-def _run_model_prompt(prompt, analysis_mode='preview'):
+def _run_model_prompt(prompt, analysis_mode='preview', agent_id='', context=None):
     payload = _gateway_payload({'message': prompt, 'analysis_mode': analysis_mode})
-    result = call_gateway_chat(payload, current_app.config['AI_GATEWAY_BASE_URL'])
+    result = call_gateway_chat(
+        payload,
+        current_app.config['AI_GATEWAY_BASE_URL'],
+        agent_id=agent_id,
+        context=context,
+    )
     # `call_gateway_chat` returns an OpenAI-style completion payload.
     # Normalize through compat helper so callers always get plain text.
     compat = build_compat_chat_response(payload, result)
@@ -162,6 +167,16 @@ def _write_analysis_metadata(file_path, payload):
 def _run_smart_analysis(payload):
     ai_settings = get_ai_settings(defaults=_default_ai_settings())
     prepared = prepare_analysis_request(payload, settings=ai_settings)
+    selected_agent_id = str(payload.get('agent_id') or '').strip()
+    if selected_agent_id and prepared.get('cacheKey'):
+        prepared['cacheKey'] = f"{prepared['cacheKey']}::{selected_agent_id}"
+    agent_context = {
+        'mode': prepared['mode'],
+        'fileName': prepared['fileName'],
+        'columns': prepared['columns'],
+        'recordCount': prepared['recordCount'],
+        'records': prepared['selectedRecords'] if prepared['mode'] != 'full_dataset' else prepared['records'],
+    }
     if not has_meaningful_ticket_data(prepared):
         return {
             'status': 'no_data',
@@ -197,7 +212,14 @@ def _run_smart_analysis(payload):
                     ]
                 ),
             }
-            parsed = parse_llm_json(_run_model_prompt(plan['prompt'], analysis_mode='full_dataset'))
+            parsed = parse_llm_json(
+                _run_model_prompt(
+                    plan['prompt'],
+                    analysis_mode='full_dataset',
+                    agent_id=selected_agent_id,
+                    context=agent_context,
+                )
+            )
             meta = {
                 'records_used': prepared['recordCount'],
                 'truncated': prepared['truncated'],
@@ -211,7 +233,14 @@ def _run_smart_analysis(payload):
 
         chunk_summaries = []
         for chunk_prompt in plan['chunks']:
-            chunk_result = parse_llm_json(_run_model_prompt(chunk_prompt, analysis_mode='focused'))
+            chunk_result = parse_llm_json(
+                _run_model_prompt(
+                    chunk_prompt,
+                    analysis_mode='focused',
+                    agent_id=selected_agent_id,
+                    context=agent_context,
+                )
+            )
             chunk_summaries.append(
                 {
                     'summary': chunk_result.get('summary', ''),
@@ -220,7 +249,14 @@ def _run_smart_analysis(payload):
             )
 
         final_prompt = plan['finalPrompt'](chunk_summaries, prepared)
-        parsed = parse_llm_json(_run_model_prompt(final_prompt, analysis_mode='full_dataset'))
+        parsed = parse_llm_json(
+            _run_model_prompt(
+                final_prompt,
+                analysis_mode='full_dataset',
+                agent_id=selected_agent_id,
+                context=agent_context,
+            )
+        )
         meta = {
             'records_used': prepared['recordCount'],
             'truncated': prepared['truncated'],
@@ -229,7 +265,14 @@ def _run_smart_analysis(payload):
             'model': 'gateway-managed',
         }
     else:
-        parsed = parse_llm_json(_run_model_prompt(plan['prompt'], analysis_mode=prepared['mode']))
+        parsed = parse_llm_json(
+            _run_model_prompt(
+                plan['prompt'],
+                analysis_mode=prepared['mode'],
+                agent_id=selected_agent_id,
+                context=agent_context,
+            )
+        )
         meta = {
             'records_used': prepared['recordsUsed'],
             'truncated': prepared['truncated'],
@@ -248,6 +291,7 @@ def _run_smart_analysis(payload):
 @ai_bp.post('/chat')
 def chat():
     raw_payload = request.get_json(silent=True) or {}
+    selected_agent_id = str(raw_payload.get('agent_id') or '').strip()
     if not current_app.config.get('USE_AI_GATEWAY', False):
         return jsonify({'status': 'error', 'error': 'AI gateway is disabled.'}), 503
 
@@ -281,7 +325,12 @@ def chat():
     payload = _gateway_payload(raw_payload)
 
     try:
-        result = call_gateway_chat(payload, current_app.config['AI_GATEWAY_BASE_URL'])
+        result = call_gateway_chat(
+            payload,
+            current_app.config['AI_GATEWAY_BASE_URL'],
+            agent_id=selected_agent_id,
+            context=raw_payload.get('context'),
+        )
         return jsonify(build_compat_chat_response(payload, result))
     except ValueError as error:
         write_ai_interaction_error(payload, str(error))

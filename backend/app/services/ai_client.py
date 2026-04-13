@@ -1,10 +1,12 @@
 import logging
 import re
+import json
 from time import perf_counter
 
 import requests
 from flask import current_app, has_app_context
 from requests import RequestException
+from .agent_store import get_agent
 
 from .ai_interaction_log import write_ai_interaction
 
@@ -182,13 +184,57 @@ def sanitize_payload(payload):
     return sanitized
 
 
-def call_gateway_chat(payload, gateway_base_url, timeout_seconds=DEFAULT_REQUEST_TIMEOUT):
+def resolve_prompt(agent_id, user_input, context=None):
+    selected_agent_id = str(agent_id or "").strip()
+    if not selected_agent_id:
+        return ""
+
+    agent = get_agent(selected_agent_id)
+    if not agent or not agent.get("enabled", True):
+        return ""
+
+    template = str(agent.get("prompt_template") or "").strip()
+    if not template:
+        return ""
+
+    input_text = str(user_input or "").strip()
+    if not input_text:
+        input_text = "No user input provided."
+
+    if isinstance(context, (dict, list)):
+        context_text = json.dumps(context, ensure_ascii=False, indent=2)
+    else:
+        context_text = str(context or "").strip()
+
+    return template.replace("{{input}}", input_text).replace("{{context}}", context_text)
+
+
+def call_gateway_chat(payload, gateway_base_url, timeout_seconds=DEFAULT_REQUEST_TIMEOUT, agent_id=None, context=None):
     if not str(gateway_base_url or "").strip():
         raise RequestException('AI gateway is not configured.')
     if has_app_context() and not current_app.config.get('USE_AI_GATEWAY', False):
         raise RequestException('AI gateway is disabled by configuration.')
 
-    sanitized_payload = sanitize_payload(payload)
+    next_payload = dict(payload or {})
+    selected_agent_id = str(agent_id or next_payload.get("agent_id") or "").strip()
+    if selected_agent_id:
+        try:
+            user_input = build_prompt(next_payload)
+        except ValueError:
+            user_input = str(next_payload.get("message") or "").strip()
+
+        resolved = resolve_prompt(
+            selected_agent_id,
+            user_input=user_input,
+            context=context if context is not None else next_payload.get("context"),
+        )
+        if resolved:
+            next_payload.pop("messages", None)
+            next_payload["message"] = resolved
+
+    logged_agent_id = selected_agent_id
+    next_payload.pop("agent_id", None)
+    sanitized_payload = sanitize_payload(next_payload)
     started_at = perf_counter()
     response = requests.post(
         f"{gateway_base_url.rstrip('/')}/v1/chat/completions",
@@ -199,7 +245,13 @@ def call_gateway_chat(payload, gateway_base_url, timeout_seconds=DEFAULT_REQUEST
     result = response.json()
     duration_ms = int((perf_counter() - started_at) * 1000)
     interaction_type = str((sanitized_payload or {}).get("type") or (sanitized_payload or {}).get("analysis_mode") or "chat")
-    write_ai_interaction(sanitized_payload, result, duration_ms, provider="ai-gateway", interaction_type=interaction_type)
+    log_payload = dict(sanitized_payload)
+    if logged_agent_id:
+        log_payload["agent_id"] = logged_agent_id
+    if next_payload.get("analysis_mode"):
+        log_payload["analysis_mode"] = next_payload.get("analysis_mode")
+
+    write_ai_interaction(log_payload, result, duration_ms, provider="ai-gateway", interaction_type=interaction_type)
     return result
 
 

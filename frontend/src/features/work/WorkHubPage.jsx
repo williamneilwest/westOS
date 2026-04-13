@@ -1,87 +1,178 @@
-import { BarChart3, Clock3, FileSpreadsheet, Mail, Search, Users, UsersRound } from 'lucide-react';
+import {
+  BarChart3,
+  Clock3,
+  FileSpreadsheet,
+  HardDrive,
+  LayoutGrid,
+  Link2,
+  Mail,
+  Monitor,
+  Printer,
+  Search,
+  Shield,
+  Ticket,
+  Upload,
+  User,
+  Users,
+  UsersRound,
+  Wrench,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getUploads } from '../../app/services/api';
-import { getLatestTickets } from '../../app/services/api';
+import { getLatestTickets, getUploads } from '../../app/services/api';
 import { SectionHeader } from '../../app/ui/SectionHeader';
 import { formatDataFileName } from '../../app/utils/fileDisplay';
 import { storage } from '../../app/utils/storage';
-import { getCachedWorkDataset } from './workDatasetCache';
-import { setCachedWorkDataset } from './workDatasetCache';
+import { getCachedWorkDataset, setCachedWorkDataset } from './workDatasetCache';
 
 const LAST_ACTIVITY_KEY = 'westos.work.lastHubActivity';
 
-const coreModules = [
+const domainNav = [
+  { label: 'Tickets', href: '/app/work/active-tickets', icon: Ticket },
+  { label: 'Users', href: '/app/work/get-user-groups', icon: User },
+  { label: 'Devices', href: '/app/work/group-search', icon: Monitor },
+  { label: 'Printers', href: '/app/work/user-group-association', icon: Printer },
+  { label: 'Software', href: '/app/work/ai-metrics', icon: HardDrive },
+  { label: 'Tools', href: '/app/work', icon: Wrench },
+];
+
+const domainCards = [
+  {
+    title: 'Users',
+    description: 'User identity, groups, and account actions.',
+    icon: Users,
+    actions: [
+      { label: 'Lookup User', href: '/app/work/get-user-groups' },
+      { label: 'Group Search', href: '/app/work/group-search' },
+      { label: 'Association Script', href: '/app/work/user-group-association' },
+    ],
+  },
+  {
+    title: 'Devices',
+    description: 'Computer lookup, assignment checks, and operational context.',
+    icon: Monitor,
+    actions: [
+      { label: 'Device Lookup', href: '/app/work/group-search' },
+      { label: 'Active Tickets', href: '/app/work/active-tickets' },
+      { label: 'Dataset Table', href: '/app/work/table' },
+    ],
+  },
+  {
+    title: 'Printers',
+    description: 'Printer registration and group-driven assignment workflow.',
+    icon: Printer,
+    actions: [
+      { label: 'Register Flow', href: '/app/work/user-group-association' },
+      { label: 'Lookup Groups', href: '/app/work/group-search' },
+      { label: 'User Groups', href: '/app/work/get-user-groups' },
+    ],
+  },
+  {
+    title: 'Software',
+    description: 'Application checks and deployment support actions.',
+    icon: HardDrive,
+    actions: [
+      { label: 'AI Insights', href: '/app/work/ai-metrics' },
+      { label: 'Data Tools', href: '/app/data' },
+      { label: 'Uploads', href: '/app/uploads' },
+    ],
+  },
+  {
+    title: 'Hardware',
+    description: 'Asset lookup and supporting investigation tooling.',
+    icon: Shield,
+    actions: [
+      { label: 'Reference', href: '/app/reference' },
+      { label: 'Group Search', href: '/app/work/group-search' },
+      { label: 'Ticket Queue', href: '/app/work/active-tickets' },
+    ],
+  },
+];
+
+const ticketCards = [
   {
     title: 'Active Tickets',
-    description: 'Open the ticket workspace with cards, table view, and ticket drill-down.',
+    description: 'Primary triage and ticket execution workspace.',
     href: '/app/work/active-tickets',
     icon: FileSpreadsheet,
-    cta: 'Open',
-    recommended: true,
   },
   {
-    title: 'AI Metrics',
-    description: 'Review computed metrics and generate AI summaries from your active dataset.',
+    title: 'Ticket Insights',
+    description: 'Structured AI summaries and operational insights.',
     href: '/app/work/ai-metrics',
     icon: BarChart3,
-    cta: 'Open',
   },
   {
-    title: 'Email Uploads',
-    description: 'Browse archived inbound files from the upload intake pipeline.',
+    title: 'Upload / Import',
+    description: 'Bring in CSV or inbound email artifacts.',
     href: '/app/uploads',
-    icon: Mail,
-    cta: 'Open',
+    icon: Upload,
   },
 ];
 
-const directoryModules = [
-  {
-    title: 'Group Search Tool',
-    description: 'Run cache-first group search without leaving the work module.',
-    href: '/app/work/group-search',
-    icon: Search,
-    cta: 'Open',
-  },
-  {
-    title: 'Get User Groups',
-    description: 'Resolve a user OPID to group memberships and cache results.',
-    href: '/app/work/get-user-groups',
-    icon: Users,
-    cta: 'Open',
-  },
-  {
-    title: 'User-Group Association',
-    description: 'Select users, target groups, and generate an association script.',
-    href: '/app/work/user-group-association',
-    icon: UsersRound,
-    cta: 'Open',
-  },
+const quickActionChips = [
+  { label: 'Register Printer', href: '/app/work/user-group-association', icon: Printer },
+  { label: 'Lookup User', href: '/app/work/get-user-groups', icon: Users },
+  { label: 'Lookup Device', href: '/app/work/group-search', icon: Search },
+  { label: 'Upload CSV', href: '/app/uploads', icon: Upload },
+  { label: 'Run Script', href: '/app/work/user-group-association', icon: Wrench },
 ];
 
-function ToolCard({ module, compact = false, onOpen }) {
+const externalLinks = [
+  { label: 'ServiceNow', href: '/app/work/active-tickets' },
+  { label: 'Graph Explorer', href: '/app/reference' },
+  { label: 'Internal Dashboards', href: '/app/work/ai-metrics' },
+];
+
+function CollapsibleSection({ title, subtitle, defaultOpen = true, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
-    <Link
-      className={`ui-card work-tool-card${compact ? ' work-tool-card--compact' : ''}${module.recommended ? ' work-tool-card--recommended' : ''}`}
-      onClick={() => onOpen?.(module)}
-      state={{ from: '/app/work', label: 'Work Hub' }}
-      to={module.href}
-    >
-      <div className="work-tool-card__top">
-        <span className="work-tool-card__icon" aria-hidden="true">
-          <module.icon size={16} />
+    <section className="work-hub-section">
+      <header className="work-hub-section__header">
+        <div>
+          <strong>{title}</strong>
+          {subtitle ? <small>{subtitle}</small> : null}
+        </div>
+        <button
+          type="button"
+          className={open ? 'compact-toggle compact-toggle--active' : 'compact-toggle'}
+          onClick={() => setOpen((current) => !current)}
+        >
+          {open ? 'Collapse' : 'Expand'}
+        </button>
+      </header>
+      {open ? <div className="work-hub-section__body">{children}</div> : null}
+    </section>
+  );
+}
+
+function DomainCard({ domain, onOpen }) {
+  return (
+    <article className="ui-card work-domain-card">
+      <div className="work-domain-card__head">
+        <span className="work-domain-card__icon" aria-hidden="true">
+          <domain.icon size={16} />
         </span>
-        <div className="work-tool-card__copy">
-          <div className="work-tool-card__title-row">
-            <h3>{module.title}</h3>
-            {module.recommended ? <span className="ui-eyebrow">Recommended</span> : null}
-          </div>
-          <p title={module.description}>{module.description}</p>
+        <div>
+          <h3>{domain.title}</h3>
+          <p>{domain.description}</p>
         </div>
       </div>
-      <span className="work-tool-card__cta">{module.cta}</span>
-    </Link>
+      <div className="work-domain-card__actions">
+        {domain.actions.map((action) => (
+          <Link
+            key={`${domain.title}-${action.label}`}
+            className="work-domain-card__action"
+            to={action.href}
+            onClick={() => onOpen({ title: `${domain.title} / ${action.label}`, href: action.href })}
+            state={{ from: '/app/work', label: 'Work Hub' }}
+          >
+            {action.label}
+          </Link>
+        ))}
+      </div>
+    </article>
   );
 }
 
@@ -90,7 +181,23 @@ export function WorkHubPage() {
   const [latestUpload, setLatestUpload] = useState('None');
   const cachedDataset = getCachedWorkDataset();
 
-  const quickActions = useMemo(() => coreModules.slice(0, 3), []);
+  const recentWorkItems = useMemo(
+    () => [
+      { label: 'Last ticket opened', value: lastActivity?.title || 'None', icon: Ticket },
+      {
+        label: 'Last user searched',
+        value: storage.get('westos.work.lastUserSearch') || 'None',
+        icon: Users,
+      },
+      {
+        label: 'Last device accessed',
+        value: storage.get('westos.work.lastDeviceAccess') || 'None',
+        icon: Monitor,
+      },
+      { label: 'Recent upload', value: latestUpload, icon: Upload },
+    ],
+    [lastActivity?.title, latestUpload]
+  );
 
   useEffect(() => {
     if (cachedDataset?.rows?.length) {
@@ -171,60 +278,144 @@ export function WorkHubPage() {
   }
 
   return (
-    <section className="module">
+    <section className="module work-hub-cockpit">
       <SectionHeader
         tag="/app/work"
         title="Work Hub"
-        description="Start with Active Tickets or review AI Metrics from your latest dataset."
+        description="Start from domain context, then execute actions without leaving the flow."
       />
 
-      <div className="work-quick-actions" role="group" aria-label="Quick actions">
-        {quickActions.map((module, index) => (
+      <nav className="work-domain-nav" aria-label="Domain navigation">
+        {domainNav.map((item) => (
           <Link
-            key={module.href}
-            className={`work-quick-action${index === 0 ? ' work-quick-action--primary' : ''}`}
-            onClick={() => handleModuleOpen(module)}
+            key={item.label}
+            className="work-domain-nav__item"
+            to={item.href}
+            onClick={() => handleModuleOpen({ title: item.label, href: item.href })}
             state={{ from: '/app/work', label: 'Work Hub' }}
-            to={module.href}
           >
-            <module.icon size={16} />
-            <span>{module.title}</span>
+            <item.icon size={14} />
+            <span>{item.label}</span>
           </Link>
         ))}
-      </div>
+      </nav>
+
+      <CollapsibleSection
+        title="What Are You Working On?"
+        subtitle="Recent work context across tickets, users, devices, and uploads."
+      >
+        <div className="work-recent-grid">
+          {recentWorkItems.map((item) => (
+            <article key={item.label} className="work-recent-item">
+              <span>
+                <item.icon size={14} />
+                {item.label}
+              </span>
+              <strong title={item.value}>{item.value}</strong>
+            </article>
+          ))}
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Core Domains"
+        subtitle="Primary operational domains grouped by responsibility."
+      >
+        <div className="work-domain-grid">
+          {domainCards.map((domain) => (
+            <DomainCard key={domain.title} domain={domain} onOpen={handleModuleOpen} />
+          ))}
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Tickets"
+        subtitle="Primary workflow surface for triage, insights, and imports."
+      >
+        <div className="work-ticket-row">
+          {ticketCards.map((item) => (
+            <Link
+              key={item.title}
+              className="ui-card work-ticket-card"
+              to={item.href}
+              onClick={() => handleModuleOpen({ title: item.title, href: item.href })}
+              state={{ from: '/app/work', label: 'Work Hub' }}
+            >
+              <div className="work-ticket-card__head">
+                <item.icon size={16} />
+                <h3>{item.title}</h3>
+              </div>
+              <p>{item.description}</p>
+            </Link>
+          ))}
+        </div>
+
+        {cachedDataset?.rows?.length ? (
+          <article className="work-context-panel" aria-live="polite">
+            <div className="work-context-panel__head">
+              <LayoutGrid size={14} />
+              <strong>Suggested Actions For This Dataset</strong>
+            </div>
+            <div className="work-context-panel__actions">
+              <Link to="/app/work/active-tickets">View Tickets</Link>
+              <Link to="/app/work/ai-metrics">Run AI Analysis</Link>
+              <Link to="/app/kb">Match KB Articles</Link>
+            </div>
+            <small>{`Loaded: ${formatDataFileName(cachedDataset.fileName) || 'Dataset'}`}</small>
+          </article>
+        ) : null}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Quick Actions"
+        subtitle="Run common actions immediately without navigating deeper."
+      >
+        <div className="work-chip-row" role="group" aria-label="Quick action chips">
+          {quickActionChips.map((item) => (
+            <Link
+              key={item.label}
+              className="work-action-chip"
+              to={item.href}
+              onClick={() => handleModuleOpen({ title: item.label, href: item.href })}
+              state={{ from: '/app/work', label: 'Work Hub' }}
+            >
+              <item.icon size={13} />
+              <span>{item.label}</span>
+            </Link>
+          ))}
+        </div>
+      </CollapsibleSection>
+
+      <details className="work-links-panel">
+        <summary>
+          <Link2 size={14} />
+          <span>Quick Links</span>
+        </summary>
+        <div className="work-links-panel__body">
+          {externalLinks.map((item) => (
+            <Link
+              key={item.label}
+              to={item.href}
+              onClick={() => handleModuleOpen({ title: item.label, href: item.href })}
+              state={{ from: '/app/work', label: 'Work Hub' }}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      </details>
 
       <div className="work-activity-strip">
         <span>
           <Clock3 size={14} />
           Last opened: {lastActivity?.title || 'None'}
         </span>
-        <span>Last upload: {latestUpload}</span>
         <span>Recent ticket run: {formatDataFileName(cachedDataset?.fileName) || 'None'}</span>
+        <span>
+          <Mail size={14} />
+          Last upload: {latestUpload}
+        </span>
       </div>
-
-      <section className="work-section">
-        <header className="work-section__header">
-          <strong>Core Workflow</strong>
-          <small>Primary launch points for ticket analysis</small>
-        </header>
-        <div className="work-tools-grid">
-          {coreModules.map((module) => (
-            <ToolCard key={module.href} module={module} onOpen={handleModuleOpen} />
-          ))}
-        </div>
-      </section>
-
-      <section className="work-section">
-        <header className="work-section__header">
-          <strong>User & Directory Tools</strong>
-          <small>Directory automation and membership lookups</small>
-        </header>
-        <div className="work-tools-grid work-tools-grid--compact">
-          {directoryModules.map((module) => (
-            <ToolCard key={module.href} compact module={module} onOpen={handleModuleOpen} />
-          ))}
-        </div>
-      </section>
     </section>
   );
 }

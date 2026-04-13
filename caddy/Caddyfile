@@ -4,23 +4,34 @@
 }
 
 # -------------------------
-# 🔐 Infra Auth (Caddy-level)
+# 🔁 COMMON BLOCKS
 # -------------------------
-(auth_infra) {
-	# Intentionally empty to avoid startup failure when infra auth secrets are unavailable.
+
+(block_common) {
+	@blocked_ips remote_ip 185.177.72.50
+	handle @blocked_ips {
+		abort
+	}
+}
+
+(infra_service) {
+	import block_common
 }
 
 # -------------------------
 # 🌐 WORK DOMAIN (PUBLIC)
 # -------------------------
+
 work.westos.dev {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
-	}
+	import block_common
 
 	handle /api/* {
-		reverse_proxy backend:5000
+		reverse_proxy backend:5000 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
 	}
 
 	handle /flows/* {
@@ -41,167 +52,89 @@ work.westos.dev {
 }
 
 # -------------------------
-# 🔐 MAIN APP (APP-LEVEL AUTH)
+# 🔐 MAIN APP
 # -------------------------
+
 westos.dev {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
+	import block_common
+
+	handle /api/* {
+		reverse_proxy backend:5000 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
 	}
 
-	route {
+	handle /flows/* {
+		reverse_proxy backend:5000
+	}
 
-		handle /api/* {
-			reverse_proxy backend:5000
-		}
+	handle /uploads* {
+		reverse_proxy backend:5000
+	}
 
-		handle /flows/* {
-			reverse_proxy backend:5000
-		}
+	handle /kb* {
+		reverse_proxy backend:5000
+	}
 
-		handle /uploads* {
-			reverse_proxy backend:5000
-		}
-
-		handle /kb* {
-			reverse_proxy backend:5000
-		}
-
-		handle {
-			reverse_proxy frontend:5173
-		}
+	handle {
+		reverse_proxy frontend:5173
 	}
 }
 
 # -------------------------
-# 🔐 INFRA SERVICES (PROTECTED)
+# 🔐 INFRA SERVICES
 # -------------------------
-
-grafana.westos.dev {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
-	}
-
-	route {
-		import auth_infra
-		reverse_proxy grafana:3000
-	}
-}
 
 grafana.westos.app {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
-	}
-
-	route {
-		import auth_infra
-		reverse_proxy grafana:3000
-	}
+	import infra_service
+	reverse_proxy grafana:3000
 }
 
-code.westos.dev {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
-	}
-
-	route {
-		import auth_infra
-		reverse_proxy code-server:8080
-	}
+code.westos.app {
+	import infra_service
+	reverse_proxy code-server:8080
 }
 
 portainer.westos.dev {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
-	}
-
-	route {
-		import auth_infra
-		reverse_proxy portainer:9000
-	}
+	import infra_service
+	reverse_proxy portainer:9000
 }
 
 files.westos.dev {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
-	}
-
-	route {
-		import auth_infra
-		reverse_proxy filebrowser:80
-	}
+	import infra_service
+	reverse_proxy filebrowser:80
 }
 
 webui.westos.dev {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
-	}
-
-	route {
-		import auth_infra
-		reverse_proxy open-webui:8080
-	}
-}
-
-plex.westos.dev {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
-	}
-
-	route {
-		import auth_infra
-		reverse_proxy plex:32400
-	}
+	import infra_service
+	reverse_proxy open-webui:8080
 }
 
 plex.westos.app {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
-	}
-
-	route {
-		import auth_infra
-		reverse_proxy plex:32400
+	import infra_service
+	reverse_proxy plex:32400 {
+		header_up X-Plex-Client-Identifier {remote_host}
 	}
 }
 
-torrent.westos.dev {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
-	}
-
-	route {
-		import auth_infra
-		reverse_proxy qbittorrent:8080
-	}
-}
-
-qbittorrent.westos.app {
-	@blocked_ips remote_ip 185.177.72.50
-	handle @blocked_ips {
-		abort
-	}
-
-	route {
-		import auth_infra
-		reverse_proxy qbittorrent:8080
-	}
+torrent.westos.app {
+	import infra_service
+	reverse_proxy qbittorrent:8080
 }
 
 # -------------------------
-# 🚫 CATCH-ALL (BLOCK UNKNOWN)
+# 🚫 CATCH ALL
 # -------------------------
+
 *.westos.dev {
-	route {
-		abort
-	}
+	import block_common
+	respond "Not Found" 404
+}
+
+*.westos.app {
+	import block_common
+	respond "Not Found" 404
 }

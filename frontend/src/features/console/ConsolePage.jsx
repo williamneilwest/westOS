@@ -76,13 +76,13 @@ function getServiceUrl(label) {
     return 'https://files.westos.dev';
   }
   if (normalized === 'code-server' || normalized.includes('code-server') || normalized === 'code') {
-    return 'https://code.westos.dev';
+    return 'https://code.westos.app';
   }
   if (normalized === 'plex' || normalized.includes('plex')) {
-    return 'https://plex.westos.dev';
+    return 'https://plex.westos.app';
   }
   if (normalized === 'qbittorrent' || normalized.includes('qbit') || normalized.includes('torrent')) {
-    return 'https://torrent.westos.dev';
+    return 'https://torrent.westos.app';
   }
   return '';
 }
