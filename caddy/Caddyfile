@@ -76,6 +76,13 @@ grafana.westos.dev {
 	}
 }
 
+grafana.westos.app {
+	route {
+		import auth_infra
+		reverse_proxy grafana:3000
+	}
+}
+
 code.westos.dev {
 	route {
 		import auth_infra
@@ -107,14 +114,28 @@ webui.westos.dev {
 plex.westos.dev {
 	route {
 		import auth_infra
-		reverse_proxy homelab-plex:32400
+		reverse_proxy plex:32400
+	}
+}
+
+plex.westos.app {
+	route {
+		import auth_infra
+		reverse_proxy plex:32400
 	}
 }
 
 torrent.westos.dev {
 	route {
 		import auth_infra
-		reverse_proxy homelab-qbittorrent:8080
+		reverse_proxy qbittorrent:8080
+	}
+}
+
+qbittorrent.westos.app {
+	route {
+		import auth_infra
+		reverse_proxy qbittorrent:8080
 	}
 }
 

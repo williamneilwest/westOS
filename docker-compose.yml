@@ -33,8 +33,8 @@ services:
       APP_NAME: ${BACKEND_APP_NAME:-westOS API}
       BACKEND_DATA_DIR: ${BACKEND_DATA_DIR:-/app/data}
       AI_GATEWAY_STATUS_URL: http://ai-gateway:${AI_GATEWAY_PORT}/health
-      USE_AI_GATEWAY: ${USE_AI_GATEWAY}
-      AI_GATEWAY_BASE_URL: http://ai-gateway:${AI_GATEWAY_PORT}
+      USE_AI_GATEWAY: "true"
+      AI_GATEWAY_BASE_URL: http://ai-gateway:5001
       OLLAMA_API_BASE: ${OLLAMA_API_BASE}
       OLLAMA_MODEL: ${OLLAMA_MODEL}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -99,8 +99,8 @@ services:
     image: ollama/ollama
     container_name: ollama
     restart: unless-stopped
-    ports:
-      - "11434:11434"
+    expose:
+      - "11434"
     volumes:
       - ./services/ollama:/root/.ollama
     networks:
@@ -111,12 +111,10 @@ services:
     container_name: open-webui
     restart: unless-stopped
     environment:
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_BASE_URL: http://ollama:11434
       WEBUI_AUTH: "False"
     expose:
       - "8080"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - open_webui_data:/app/backend/data
     networks:
