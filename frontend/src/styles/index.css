@@ -2904,6 +2904,33 @@ textarea {
   font-size: 0.9rem;
 }
 
+.codes-image-wrap {
+  margin-top: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 170px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.65rem;
+}
+
+.codes-image {
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+}
+
+.codes-text {
+  display: block;
+  margin-top: 0.55rem;
+  color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .work-domain-card p {
   margin: 0.2rem 0 0;
   color: var(--text-muted);
@@ -4108,6 +4135,7 @@ textarea {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
+  min-width: 0;
 }
 
 .document-view {
@@ -4266,21 +4294,36 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .stack-row__label span {
   display: grid;
   gap: 0.12rem;
   text-align: left;
+  min-width: 0;
+  width: 100%;
 }
 
 .stack-row__label small {
   color: var(--text-soft);
 }
 
+.quick-link-url {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .stack-row__actions {
+  display: inline-flex;
+  align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
+  flex: 0 0 auto;
 }
 
 .upload-row-menu {
@@ -8132,6 +8175,16 @@ textarea {
 .system-card {
   padding: 1rem;
   border-radius: 1rem;
+}
+
+.software-registry-page .ui-card,
+.software-registry-page .ui-card--accent,
+.software-registry-page .ui-card--emerald {
+  background: var(--bg-panel);
+}
+
+.software-registry-page .ui-card::before {
+  display: none;
 }
 
 .system-service-card {

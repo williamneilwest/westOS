@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from ..models.reference import Group, SessionLocal, User, init_db
+from ..services.data_source_service import register_source
 from ..services.group_metadata import merge_group_tags
 
 
@@ -20,6 +21,12 @@ def list_groups():
     session = SessionLocal()
     try:
         groups = session.query(Group).all()
+        register_source(
+            key='reference_groups',
+            name='Groups',
+            table_name='ref_groups',
+            row_count=len(groups),
+        )
         return jsonify([
             {
                 'group_id': g.id,
@@ -75,6 +82,13 @@ def upsert_groups():
                 )
 
         session.commit()
+        count = int(session.query(Group).count())
+        register_source(
+            key='reference_groups',
+            name='Groups',
+            table_name='ref_groups',
+            row_count=count,
+        )
         return jsonify({'success': True})
     finally:
         session.close()
@@ -86,6 +100,12 @@ def list_users():
     session = SessionLocal()
     try:
         users = session.query(User).all()
+        register_source(
+            key='users',
+            name='Users',
+            table_name='ref_users',
+            row_count=len(users),
+        )
         return jsonify([{'id': u.id, 'name': u.name, 'email': u.email} for u in users])
     finally:
         session.close()
@@ -122,6 +142,13 @@ def upsert_users():
                 session.add(User(id=uid, name=name, email=email))
 
         session.commit()
+        count = int(session.query(User).count())
+        register_source(
+            key='users',
+            name='Users',
+            table_name='ref_users',
+            row_count=count,
+        )
         return jsonify({'success': True})
     finally:
         session.close()

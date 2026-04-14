@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from sqlalchemy import String, Column, DateTime, Integer, ForeignKey, create_engine, inspect, text, Text
+from sqlalchemy import String, Column, DateTime, Integer, ForeignKey, JSON, create_engine, inspect, text, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .platform import resolve_database_url
@@ -24,6 +24,8 @@ class Group(Base):
     name = Column(String, nullable=False)
     description = Column(Text)
     tags = Column(Text)
+    raw_json = Column(JSON)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class User(Base):
@@ -31,7 +33,12 @@ class User(Base):
 
     id = Column(String, primary_key=True)
     name = Column(String)
+    display_name = Column(String)
     email = Column(String)
+    job_title = Column(String)
+    department = Column(String)
+    raw_json = Column(JSON)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     source = Column(String)
     last_synced = Column(DateTime)
 
@@ -108,6 +115,10 @@ def _ensure_reference_group_columns():
         statements.append('ALTER TABLE ref_groups ADD COLUMN description TEXT')
     if 'tags' not in columns:
         statements.append('ALTER TABLE ref_groups ADD COLUMN tags TEXT')
+    if 'raw_json' not in columns:
+        statements.append('ALTER TABLE ref_groups ADD COLUMN raw_json JSON')
+    if 'updated_at' not in columns:
+        statements.append('ALTER TABLE ref_groups ADD COLUMN updated_at TIMESTAMP')
 
     if not statements:
         return
@@ -149,7 +160,17 @@ def _ensure_reference_user_columns():
     if 'source' not in columns:
         statements.append('ALTER TABLE ref_users ADD COLUMN source VARCHAR')
     if 'last_synced' not in columns:
-        statements.append('ALTER TABLE ref_users ADD COLUMN last_synced DATETIME')
+        statements.append('ALTER TABLE ref_users ADD COLUMN last_synced TIMESTAMP')
+    if 'display_name' not in columns:
+        statements.append('ALTER TABLE ref_users ADD COLUMN display_name VARCHAR')
+    if 'job_title' not in columns:
+        statements.append('ALTER TABLE ref_users ADD COLUMN job_title VARCHAR')
+    if 'department' not in columns:
+        statements.append('ALTER TABLE ref_users ADD COLUMN department VARCHAR')
+    if 'raw_json' not in columns:
+        statements.append('ALTER TABLE ref_users ADD COLUMN raw_json JSON')
+    if 'updated_at' not in columns:
+        statements.append('ALTER TABLE ref_users ADD COLUMN updated_at TIMESTAMP')
 
     if not statements:
         return
@@ -179,11 +200,11 @@ def _ensure_user_group_columns():
     if 'source' not in columns:
         statements.append('ALTER TABLE ref_user_groups ADD COLUMN source VARCHAR')
     if 'last_synced' not in columns:
-        statements.append('ALTER TABLE ref_user_groups ADD COLUMN last_synced DATETIME')
+        statements.append('ALTER TABLE ref_user_groups ADD COLUMN last_synced TIMESTAMP')
     if 'created_at' not in columns:
-        statements.append('ALTER TABLE ref_user_groups ADD COLUMN created_at DATETIME')
+        statements.append('ALTER TABLE ref_user_groups ADD COLUMN created_at TIMESTAMP')
     if 'updated_at' not in columns:
-        statements.append('ALTER TABLE ref_user_groups ADD COLUMN updated_at DATETIME')
+        statements.append('ALTER TABLE ref_user_groups ADD COLUMN updated_at TIMESTAMP')
 
     if not statements:
         return

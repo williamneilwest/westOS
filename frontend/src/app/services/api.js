@@ -183,6 +183,47 @@ export function getLatestTickets({ assignee = '' } = {}) {
   return request(backendBaseUrl, `/api/work/tickets${suffix}`);
 }
 
+export async function getWorkCodes({ query = '', type = '' } = {}) {
+  const params = new URLSearchParams();
+  const normalizedQuery = String(query || '').trim();
+  const normalizedType = String(type || '').trim().toLowerCase();
+  if (normalizedQuery) {
+    params.set('q', normalizedQuery);
+  }
+  if (normalizedType) {
+    params.set('type', normalizedType);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  const payload = await request(backendBaseUrl, `/api/work/codes${suffix}`);
+  return unwrapData(payload);
+}
+
+export async function createWorkCode({ type = 'qr', text = '', label = '' } = {}) {
+  const payload = await request(backendBaseUrl, '/api/work/codes', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      type: String(type || 'qr'),
+      text: String(text || ''),
+      label: String(label || ''),
+    }),
+  });
+  return unwrapData(payload);
+}
+
+export async function uploadWorkCodes(file, { type = 'qr' } = {}) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('type', String(type || 'qr'));
+  const payload = await request(backendBaseUrl, '/api/work/codes/upload', {
+    method: 'POST',
+    body: formData,
+  });
+  return unwrapData(payload);
+}
+
 export function getUploads() {
   return request(backendBaseUrl, '/uploads');
 }
@@ -250,6 +291,17 @@ export function searchUsersLive(query) {
   const params = new URLSearchParams();
   params.set('q', String(query || '').trim());
   return request(backendBaseUrl, `/api/search-users-live?${params.toString()}`);
+}
+
+export async function getUsersSourceTable(query, { limit = 200 } = {}) {
+  const params = new URLSearchParams();
+  const normalizedQuery = String(query || '').trim();
+  if (normalizedQuery) {
+    params.set('q', normalizedQuery);
+  }
+  params.set('limit', String(limit || 200));
+  const payload = await request(backendBaseUrl, `/api/users-source?${params.toString()}`);
+  return unwrapData(payload);
 }
 
 export function getDataTools(fileType) {

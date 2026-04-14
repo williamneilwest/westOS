@@ -42,6 +42,8 @@ WORK_ALLOWED_PREFIXES = (
     '/api/profile',
     '/api/flows',
     '/api/software',
+    '/api/software-registry',
+    '/api/work/codes',
 )
 PUBLIC_AUTH_PATH_PREFIX = '/api/auth/'
 PUBLIC_WEBHOOK_PREFIXES = (
@@ -62,6 +64,7 @@ PUBLIC_WORK_VIEW_PREFIXES = (
     '/api/uploads',
     '/api/kb',
     '/api/software',
+    '/api/work/codes',
     '/kb',
     '/flows/work/recent-analyses',
 )

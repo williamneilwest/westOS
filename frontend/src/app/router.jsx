@@ -11,6 +11,7 @@ import { TicketDetail } from '../features/work/pages/TicketDetail';
 import { WorkInsightsPage } from '../features/work/WorkInsightsPage';
 import { WorkHubPage } from '../features/work/WorkHubPage';
 import { WorkDomainPage } from '../features/work/WorkDomainPage';
+import { CodesPage } from '../features/work/CodesPage';
 import { SoftwareRegistryPage } from '../features/software/SoftwareRegistryPage';
 import { SystemViewerPage } from '../features/system/SystemViewerPage';
 import { FlowRunsPage } from '../features/system/FlowRunsPage';
@@ -261,6 +262,10 @@ export const router = createBrowserRouter(
         element: <WorkDomainPage domain="software" />
       },
       {
+        path: 'work/codes',
+        Component: CodesPage
+      },
+      {
         path: 'work/hardware',
         element: <WorkDomainPage domain="hardware" />
       },
@@ -329,6 +334,10 @@ export const router = createBrowserRouter(
   {
     path: '/work/software',
     element: <Navigate replace to="/app/work/software" />
+  },
+  {
+    path: '/work/codes',
+    element: <Navigate replace to="/app/work/codes" />
   },
   {
     path: '/work/hardware',

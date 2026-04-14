@@ -14,6 +14,7 @@ from .entity_cache_service import (
     replace_user_groups,
     upsert_user,
 )
+from .flow_ingest_service import ingest_flow_response
 
 
 DEFAULT_SCRIPT_NAME = 'Search Groups'
@@ -311,6 +312,7 @@ def lookup_groups_via_flow(search_text, user_id=None):
         except ValueError:
             parsed_body = raw_text
 
+        ingest_flow_response(parsed_body)
         groups = _extract_groups(parsed_body)
         upserted = upsert_groups(groups)
 
@@ -436,6 +438,7 @@ def get_user_groups_via_flow(user_opid, user_id=None):
         except ValueError:
             parsed_body = raw_text
 
+        ingest_flow_response(parsed_body)
         resolved = resolve_groups_by_ids(_extract_group_ids(parsed_body))
         session = SessionLocal()
         try:

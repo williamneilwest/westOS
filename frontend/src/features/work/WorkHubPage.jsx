@@ -1,4 +1,5 @@
 import {
+  Barcode,
   Clock3,
   FileSpreadsheet,
   HardDrive,
@@ -61,6 +62,12 @@ const domainCards = [
     icon: Shield,
     href: '/app/work/hardware',
   },
+  {
+    title: 'Codes',
+    description: 'Create and store QR/barcodes from text or uploads.',
+    icon: Barcode,
+    href: '/app/work/codes',
+  },
 ];
 
 const quickActionChips = [
@@ -69,6 +76,7 @@ const quickActionChips = [
   { label: 'Lookup Device', href: '/app/work/groups', icon: Search },
   { label: 'Open KB', href: '/app/kb', icon: BookOpen },
   { label: 'Upload CSV', href: '/app/uploads', icon: FileSpreadsheet },
+  { label: 'Codes', href: '/app/work/codes', icon: Barcode },
   { label: 'Run Script', href: '/app/work/users', icon: Wrench },
 ];
 

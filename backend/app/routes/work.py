@@ -26,6 +26,7 @@ from ..services.active_tickets import (
 )
 from ..services.analysis_store import get_analysis_file, list_recent_analyses, save_analysis
 from ..services.csv_analyzer import build_csv_analysis
+from ..services.data_source_service import register_source
 from ..services.authz import RUN_AI, require_auth, require_permission
 from ..services.ai_client import build_compat_chat_response, call_gateway_chat
 
@@ -179,6 +180,12 @@ def latest_tickets():
         payload = load_latest_ticket_payload()
         tickets = payload.get('tickets') if isinstance(payload.get('tickets'), list) else []
         columns = payload.get('columns') if isinstance(payload.get('columns'), list) else []
+        register_source(
+            key='tickets_active',
+            name='Active Tickets',
+            table_name='tickets_active',
+            row_count=len(tickets),
+        )
         assignee = str(request.args.get('assignee') or '').strip()
         metrics = compute_ticket_metrics(tickets, columns)
         todo = build_todo_from_tickets(tickets, assignee, columns, limit=10) if assignee else []
