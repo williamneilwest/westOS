@@ -321,6 +321,7 @@ export function AppShell() {
           actions: [
             { href: '/app/work/active-tickets', label: 'Active Tickets' },
             { href: '/app/uploads', label: 'Upload File' },
+            { href: '/app/data-sources', label: 'Data Sources' },
           ],
         },
         ...(isAdmin ? [{

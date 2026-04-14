@@ -1,4 +1,4 @@
-import { Clipboard, Network, Search, Sparkles, UsersRound } from 'lucide-react';
+import { Network, Search, Sparkles, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useBackNavigation } from '../../app/hooks/useBackNavigation';
@@ -17,6 +17,7 @@ import {
   getCachedGroupsForUser,
   getCachedUsersWithDiagnostics,
   normalizeFlowMembershipResponse,
+  cacheGroupLookupResults,
   readUserGroupsCacheMap,
   upsertCachedUserRecord,
   writeUserGroupsCacheMap,
@@ -72,57 +73,12 @@ function updateCounter(record, key, limit) {
   return Object.fromEntries(trimmed);
 }
 
-function buildAssociationScript(user, groups) {
-  if (!user) {
-    return '';
-  }
-
-  if (!groups.length) {
-    return '# Select at least one group to validate membership.';
-  }
-
-  if (groups.every((group) => group.existsInUser)) {
-    return '✅ User already has all selected groups. No action needed.';
-  }
-
-  const missingGroups = groups.filter((group) => !group.existsInUser);
-  const userId = user.id || user.opid || '';
-
-  return [
-    `# Add missing groups for ${userId}`,
-    '',
-    ...missingGroups.map((group) => `Add-UserToGroup -UserId "${userId}" -GroupId "${group.id}"`),
-  ].join('\n');
-}
-
-async function copyText(value) {
-  if (!value) {
-    return false;
-  }
-
-  if (navigator?.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return true;
-  }
-
-  const textArea = document.createElement('textarea');
-  textArea.value = value;
-  textArea.setAttribute('readonly', '');
-  textArea.style.position = 'absolute';
-  textArea.style.left = '-9999px';
-  document.body.appendChild(textArea);
-  textArea.select();
-  const didCopy = document.execCommand('copy');
-  document.body.removeChild(textArea);
-  return didCopy;
-}
-
 function groupMatchScore(group, query) {
   if (!query) {
     return 0;
   }
 
-  const id = normalizeSearch(group.id);
+  const id = normalizeSearch(group.group_id);
   const name = normalizeSearch(group.name);
 
   if (name.startsWith(query) || id.startsWith(query)) {
@@ -153,7 +109,6 @@ export function UserGroupAssociationPage({
   const [flowLoading, setFlowLoading] = useState(false);
   const [userFlowLoading, setUserFlowLoading] = useState(false);
   const [error, setError] = useState('');
-  const [copyMessage, setCopyMessage] = useState('');
   const [flowMessage, setFlowMessage] = useState('');
   const [searchHistory, setSearchHistory] = useState({});
   const [clickedGroups, setClickedGroups] = useState({});
@@ -168,14 +123,14 @@ export function UserGroupAssociationPage({
   function mergeGroups(baseGroups = [], additionalGroups = []) {
     const merged = new Map();
     [...baseGroups, ...additionalGroups].forEach((group) => {
-      const id = String(group?.id || '').trim();
-      if (!isValidGroupId(id)) {
+      const groupId = String(group?.group_id || group?.id || '').trim();
+      if (!isValidGroupId(groupId)) {
         return;
       }
       const providedName = String(group?.name || '').trim();
-      merged.set(id, {
-        id,
-        name: providedName || id,
+      merged.set(groupId, {
+        group_id: groupId,
+        name: providedName || groupId,
         unresolved: !providedName,
       });
     });
@@ -262,7 +217,7 @@ export function UserGroupAssociationPage({
     }
 
     const cacheMap = readUserGroupsCacheMap();
-    const cachedGroupIds = getCachedGroupsForUser(effectiveSelectedUserId, cacheMap).map((group) => group.id);
+    const cachedGroupIds = getCachedGroupsForUser(effectiveSelectedUserId, cacheMap).map((group) => String(group?.group_id || '').trim()).filter(Boolean);
     const selectedSet = new Set(cachedGroupIds);
     setSelectedGroupIds([]);
     setGroups((current) => mergeGroups(current, getCachedGroupsForUser(effectiveSelectedUserId, cacheMap)));
@@ -287,22 +242,22 @@ export function UserGroupAssociationPage({
 
   const selectedGroups = useMemo(() => {
     const selectedIds = new Set(selectedGroupIds);
-    return groups.filter((group) => selectedIds.has(group.id));
+    return groups.filter((group) => selectedIds.has(group.group_id));
   }, [groups, selectedGroupIds]);
 
   const membershipValidation = useMemo(() => {
     const userGroups = Array.isArray(effectiveSelectedUser?.groups) ? effectiveSelectedUser.groups : [];
     const userGroupIds = new Set(
       userGroups
-        .map((group) => String(group?.id || '').trim())
+        .map((group) => String(group?.group_id || '').trim())
         .filter(Boolean)
     );
 
     return selectedGroups.map((group) => ({
-      id: group.id,
-      name: group.name || group.id,
+      group_id: group.group_id,
+      name: group.name || group.group_id,
       unresolved: Boolean(group.unresolved),
-      existsInUser: userGroupIds.has(group.id),
+      existsInUser: userGroupIds.has(group.group_id),
     }));
   }, [selectedGroups, effectiveSelectedUser]);
 
@@ -324,17 +279,17 @@ export function UserGroupAssociationPage({
     const selectedIds = new Set(selectedGroupIds);
 
     const matches = groups
-      .filter((group) => isValidGroupId(group?.id))
-      .filter((group) => [group.id, group.name].some((value) => normalizeSearch(value).includes(query)))
+      .filter((group) => isValidGroupId(group?.group_id))
+      .filter((group) => [group.group_id, group.name].some((value) => normalizeSearch(value).includes(query)))
       .sort((left, right) => {
-        const leftSelected = selectedIds.has(left.id) ? 1 : 0;
-        const rightSelected = selectedIds.has(right.id) ? 1 : 0;
+        const leftSelected = selectedIds.has(left.group_id) ? 1 : 0;
+        const rightSelected = selectedIds.has(right.group_id) ? 1 : 0;
         if (leftSelected !== rightSelected) {
           return rightSelected - leftSelected;
         }
 
-        const leftClicks = Number(clickedGroups[left.id] || 0);
-        const rightClicks = Number(clickedGroups[right.id] || 0);
+        const leftClicks = Number(clickedGroups[left.group_id] || 0);
+        const rightClicks = Number(clickedGroups[right.group_id] || 0);
         if (leftClicks !== rightClicks) {
           return rightClicks - leftClicks;
         }
@@ -345,25 +300,11 @@ export function UserGroupAssociationPage({
           return rightScore - leftScore;
         }
 
-        return String(left.name || left.id).localeCompare(String(right.name || right.id));
+        return String(left.name || left.group_id).localeCompare(String(right.name || right.group_id));
       });
 
     return matches.slice(0, 24);
   }, [clickedGroups, effectiveSelectedUser, groupQuery, groups, selectedGroupIds]);
-
-  const generatedScript = useMemo(
-    () => buildAssociationScript(
-      effectiveSelectedUser
-        ? {
-            id: effectiveSelectedUser.opid,
-            name: effectiveSelectedUser.display_name || effectiveSelectedUser.opid,
-            email: effectiveSelectedUser.email || '',
-          }
-        : null,
-      membershipValidation
-    ),
-    [membershipValidation, effectiveSelectedUser]
-  );
 
   function rememberSearchTerm(term) {
     const normalizedTerm = String(term || '').trim();
@@ -393,15 +334,6 @@ export function UserGroupAssociationPage({
     );
   }
 
-  async function handleCopyScript() {
-    try {
-      const didCopy = await copyText(generatedScript);
-      setCopyMessage(didCopy ? 'Script copied.' : 'Copy failed in this browser.');
-    } catch {
-      setCopyMessage('Copy failed in this browser.');
-    }
-  }
-
   async function handleFlowLookup() {
     if (!effectiveSelectedUser) {
       setFlowMessage('Select a user before searching for additional groups.');
@@ -421,6 +353,7 @@ export function UserGroupAssociationPage({
     try {
       const result = await lookupReferenceGroupsFromFlow(query);
       const items = Array.isArray(result.items) ? result.items : [];
+      cacheGroupLookupResults(items);
 
       setGroups((current) => {
         return mergeGroups(current, items);
@@ -519,7 +452,6 @@ export function UserGroupAssociationPage({
       ) : null}
 
       {error ? <p className="status-text status-text--error">{error}</p> : null}
-      {copyMessage ? <p className="status-text">{copyMessage}</p> : null}
       {flowMessage ? <p className="status-text">{flowMessage}</p> : null}
       {!embedded && !error ? <p className="status-text">{`Loaded ${cacheUsersLoaded} cached user${cacheUsersLoaded === 1 ? '' : 's'} from Get User Groups cache.`}</p> : null}
 
@@ -649,17 +581,18 @@ export function UserGroupAssociationPage({
 
             <div className="association-list association-list--fit" role="list" aria-label="Reference groups">
               {filteredGroups.length ? (
-                filteredGroups.map((group) => {
-                  const isSelected = selectedGroupIds.includes(group.id);
-                  const clickCount = Number(clickedGroups[group.id] || 0);
+                    filteredGroups.map((group) => {
+                  const groupId = group.group_id;
+                  const isSelected = selectedGroupIds.includes(groupId);
+                  const clickCount = Number(clickedGroups[groupId] || 0);
                   return (
                     <button
                       type="button"
-                      key={group.id}
+                      key={groupId}
                       className={isSelected ? 'association-list__item association-list__item--selected' : 'association-list__item'}
-                      onClick={() => toggleGroup(group.id)}
+                      onClick={() => toggleGroup(groupId)}
                     >
-                      <span className="association-list__title">{group.name || group.id}</span>
+                      <span className="association-list__title">{group.name || groupId}</span>
                       <span className="association-list__meta">{clickCount ? `opened ${clickCount}x` : 'cached group'}</span>
                     </button>
                   );
@@ -725,8 +658,8 @@ export function UserGroupAssociationPage({
               {membershipValidation.length ? (
                 <div className="association-validation__list">
                   {membershipValidation.map((group) => (
-                    <div className="association-validation__row" key={group.id}>
-                      <span title={group.id}>
+                    <div className="association-validation__row" key={group.group_id}>
+                      <span title={group.group_id}>
                         {group.name}
                         {group.unresolved ? ' (unresolved)' : ''}
                       </span>
@@ -744,37 +677,6 @@ export function UserGroupAssociationPage({
             </div>
           </Card>
 
-          <Card className="landing__card association-card">
-            <CardHeader
-              eyebrow="Output"
-              title="Generated Script"
-              description="The script uses the selected reference records and stays within the page viewport instead of stretching the layout."
-              action={
-                <button
-                  type="button"
-                  className="ui-button ui-button--secondary"
-                  onClick={handleCopyScript}
-                  disabled={!effectiveSelectedUser}
-                >
-                  <Clipboard size={16} />
-                  Copy
-                </button>
-              }
-            />
-
-            <div className="textarea-field">
-              <textarea
-                className="association-script association-script--fit"
-                readOnly
-                value={
-                  generatedScript
-                  || (!effectiveSelectedUser
-                    ? (embedded ? '# Select a user from the Users context panel first.' : '# Select a user first.')
-                    : '# Select one or more groups to validate and generate script output.')
-                }
-              />
-            </div>
-          </Card>
         </div>
       </div>
     </section>

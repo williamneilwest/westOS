@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, Eye, FileSpreadsheet } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { analyzeDocument, getUploads } from '../../app/services/api';
+import { analyzeDocument, getUploads, promoteUploadToSource } from '../../app/services/api';
 import { buildDocumentViewHref, isCsvFile } from '../../app/utils/documentFiles';
 import { formatDataFileName } from '../../app/utils/fileDisplay';
 import { Card, CardHeader } from '../../app/ui/Card';
@@ -30,11 +30,20 @@ function formatUploadSource(value) {
   return String(value || '').trim().toLowerCase() === 'email' ? 'Email upload' : 'Manual upload';
 }
 
+function normalizeSourceName(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
+}
+
 export function UploadsPage() {
   const location = useLocation();
   const [files, setFiles] = useState([]);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [promoteFilePath, setPromoteFilePath] = useState('');
+  const [promoteFileName, setPromoteFileName] = useState('');
+  const [sourceName, setSourceName] = useState('');
+  const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
+  const [promoting, setPromoting] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -55,6 +64,37 @@ export function UploadsPage() {
       isMounted = false;
     };
   }, []);
+
+  async function handlePromoteToSource() {
+    const normalizedName = normalizeSourceName(sourceName);
+    if (!promoteFilePath) {
+      setError('No file selected for source promotion.');
+      return;
+    }
+    if (!normalizedName) {
+      setError('Enter a source name.');
+      return;
+    }
+
+    setPromoting(true);
+    setError('');
+    setMessage('');
+    try {
+      await promoteUploadToSource({
+        filePath: promoteFilePath,
+        name: normalizedName,
+      });
+      setIsPromoteModalOpen(false);
+      setPromoteFilePath('');
+      setPromoteFileName('');
+      setSourceName('');
+      setMessage(`Promoted ${promoteFileName || 'upload'} to source "${normalizedName}".`);
+    } catch (requestError) {
+      setError(requestError.message || 'Promote to source failed.');
+    } finally {
+      setPromoting(false);
+    }
+  }
 
   return (
     <section className="module">
@@ -120,6 +160,20 @@ export function UploadsPage() {
                   <button
                     type="button"
                     className="compact-toggle"
+                    onClick={() => {
+                      setError('');
+                      setMessage('');
+                      setPromoteFilePath(file.path);
+                      setPromoteFileName(file.filename);
+                      setSourceName(normalizeSourceName(file.filename.replace(/\.[^.]+$/, '')));
+                      setIsPromoteModalOpen(true);
+                    }}
+                  >
+                    Promote to Source
+                  </button>
+                  <button
+                    type="button"
+                    className="compact-toggle"
                     onClick={async () => {
                       setError('');
                       setMessage('');
@@ -162,6 +216,20 @@ export function UploadsPage() {
                     <button
                       type="button"
                       className="upload-row-menu__action"
+                      onClick={() => {
+                        setError('');
+                        setMessage('');
+                        setPromoteFilePath(file.path);
+                        setPromoteFileName(file.filename);
+                        setSourceName(normalizeSourceName(file.filename.replace(/\.[^.]+$/, '')));
+                        setIsPromoteModalOpen(true);
+                      }}
+                    >
+                      Promote to Source
+                    </button>
+                    <button
+                      type="button"
+                      className="upload-row-menu__action"
                       onClick={async () => {
                         setError('');
                         setMessage('');
@@ -190,6 +258,38 @@ export function UploadsPage() {
           />
         )}
       </Card>
+
+      {isPromoteModalOpen ? (
+        <div className="auth-modal" role="presentation" onClick={() => setIsPromoteModalOpen(false)}>
+          <div className="auth-modal__surface" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <Card className="auth-modal__card">
+              <CardHeader
+                title="Promote to Data Source"
+                description={`Create/update a global source from ${promoteFileName || 'selected upload'}.`}
+              />
+              <div className="settings-form">
+                <label className="settings-field">
+                  <span>Source Name</span>
+                  <input
+                    type="text"
+                    value={sourceName}
+                    onChange={(event) => setSourceName(event.target.value)}
+                    placeholder="users_master"
+                  />
+                </label>
+              </div>
+              <div className="table-actions">
+                <button className="compact-toggle" type="button" onClick={() => setIsPromoteModalOpen(false)}>
+                  Cancel
+                </button>
+                <button className="ui-button ui-button--primary" type="button" disabled={promoting} onClick={() => void handlePromoteToSource()}>
+                  {promoting ? 'Promoting...' : 'Promote'}
+                </button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

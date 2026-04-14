@@ -19,6 +19,7 @@ from .profile import profile_bp
 from .flows import flows_bp
 from .admin import admin_bp
 from .software import software_bp
+from .data_sources import data_sources_bp
 
 
 def register_routes(app):
@@ -43,3 +44,4 @@ def register_routes(app):
     app.register_blueprint(flows_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(software_bp)
+    app.register_blueprint(data_sources_bp)

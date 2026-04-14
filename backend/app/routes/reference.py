@@ -22,7 +22,7 @@ def list_groups():
         groups = session.query(Group).all()
         return jsonify([
             {
-                'id': g.id,
+                'group_id': g.id,
                 'name': g.name,
                 'description': g.description or '',
                 'tags': g.tags or '',
@@ -48,7 +48,7 @@ def upsert_groups():
             if not isinstance(item, dict):
                 continue
 
-            gid = str(item.get('id') or '').strip()
+            gid = str(item.get('group_id') or item.get('id') or '').strip()
             name = (item.get('name') or '').strip()
             description = (item.get('description') or '').strip()
             tags = item.get('tags') or ''

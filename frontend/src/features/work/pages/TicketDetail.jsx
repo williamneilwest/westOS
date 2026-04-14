@@ -84,8 +84,9 @@ function resolveTaggedGroups(referenceGroups, associatedGroupNames) {
     const canonicalGroupName = normalizeCanonicalGroupKey(groupName);
 
     const matchedGroup = groupRows.find((group) => {
-      const idNorm = normalizeComparisonValue(group?.id);
-      const idCanon = normalizeCanonicalGroupKey(group?.id);
+      const groupId = group?.group_id;
+      const idNorm = normalizeComparisonValue(groupId);
+      const idCanon = normalizeCanonicalGroupKey(groupId);
 
       const nameNorm = normalizeComparisonValue(group?.name);
       const nameCanon = normalizeCanonicalGroupKey(group?.name);
@@ -111,9 +112,9 @@ function resolveTaggedGroups(referenceGroups, associatedGroupNames) {
       );
     });
 
-    if (matchedGroup?.id && !seenIds.has(matchedGroup.id)) {
+    if (matchedGroup?.group_id && !seenIds.has(matchedGroup.group_id)) {
       matchedGroups.push(matchedGroup);
-      seenIds.add(matchedGroup.id);
+      seenIds.add(matchedGroup.group_id);
     }
   });
 
@@ -395,9 +396,9 @@ export function TicketDetail() {
           return;
         }
 
-        const groups = Array.isArray(response?.items) ? response.items : [];
-        const taggedGroupIds = new Set(taggedGroups.map((group) => normalizeLookupValue(group?.id)).filter(Boolean));
-        const matchedGroup = groups.find((group) => taggedGroupIds.has(normalizeLookupValue(group?.id)));
+        const groups = Array.isArray(response?.groups) ? response.groups : [];
+        const taggedGroupIds = new Set(taggedGroups.map((group) => normalizeLookupValue(group?.group_id)).filter(Boolean));
+        const matchedGroup = groups.find((group) => taggedGroupIds.has(normalizeLookupValue(group?.group_id)));
 
         setResponderAccess({
           loading: false,
@@ -406,7 +407,7 @@ export function TicketDetail() {
           groups,
           taggedGroups,
           hasResponderGroup: Boolean(matchedGroup),
-          matchedGroup: matchedGroup?.name || matchedGroup?.id || '',
+          matchedGroup: matchedGroup?.name || matchedGroup?.group_id || '',
         });
       } catch (requestError) {
         if (!isMounted) {
@@ -554,7 +555,7 @@ export function TicketDetail() {
               </span>
               {responderAccess.taggedGroups.length ? (
                 <span>
-                  {`Tagged groups: ${responderAccess.taggedGroups.map((group) => `${group.name || group.id} (${group.id})`).join(', ')}`}
+                  {`Tagged groups: ${responderAccess.taggedGroups.map((group) => `${group.name || group.group_id} (${group.group_id})`).join(', ')}`}
                 </span>
               ) : null}
             </div>

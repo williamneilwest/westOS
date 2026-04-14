@@ -273,16 +273,16 @@ export function GetUserGroupsPage() {
     const groups = Array.isArray(selectedUser?.groups) ? selectedUser.groups : [];
     const query = normalizeText(groupQuery);
     const visible = groups.filter((group) => {
-      const id = String(group?.id || '').trim();
+      const id = String(group?.group_id || '').trim();
       if (!id || id.includes('$metadata') || id.startsWith('https://graph.microsoft.com')) {
         return false;
       }
       if (!query) {
         return true;
       }
-      return [group?.name, group?.id].some((value) => normalizeText(value).includes(query));
+      return [group?.name, group?.group_id].some((value) => normalizeText(value).includes(query));
     });
-    return visible.sort((left, right) => String(left?.name || left?.id).localeCompare(String(right?.name || right?.id)));
+    return visible.sort((left, right) => String(left?.name || left?.group_id).localeCompare(String(right?.name || right?.group_id)));
   }, [groupQuery, selectedUser]);
 
   const userDevices = useMemo(() => {
@@ -494,9 +494,9 @@ export function GetUserGroupsPage() {
                 <div className="association-list association-list--fit">
                   {filteredGroups.length ? (
                     filteredGroups.map((group) => (
-                      <div className="association-list__item" key={group.id}>
-                        <span className="association-list__title">{group.name || group.id}</span>
-                        <span className="association-list__meta">{group.id}</span>
+                      <div className="association-list__item" key={group.group_id}>
+                        <span className="association-list__title">{group.name || group.group_id}</span>
+                        <span className="association-list__meta">{group.group_id}</span>
                       </div>
                     ))
                   ) : (

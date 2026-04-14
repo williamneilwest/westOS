@@ -50,7 +50,7 @@ def cache_groups():
             if not isinstance(item, dict):
                 continue
 
-            gid = str(item.get('id') or '').strip()
+            gid = str(item.get('group_id') or item.get('id') or '').strip()
             if not gid:
                 # Skip items without an id
                 continue

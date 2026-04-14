@@ -22,6 +22,7 @@ import { LandingPage } from '../features/landing/LandingPage';
 import { TerminalPage } from '../features/admin/TerminalPage';
 import { AdminFlowsPage } from '../features/admin/AdminFlowsPage';
 import { FlowBuilderPage } from '../features/admin/FlowBuilderPage';
+import { DataSourcesPage } from '../features/data/DataSourcesPage';
 import { AppShell } from './shell/AppShell';
 import { isWorkDomainHost } from './constants/domain';
 import { RequireAuth } from './router/RequireAuth';
@@ -131,6 +132,12 @@ export const router = createBrowserRouter(
         ...(isWorkSubdomain
           ? { element: workRedirect }
           : { lazy: getRoute('../features/data/routes.jsx') })
+      },
+      {
+        path: 'data-sources',
+        ...(isWorkSubdomain
+          ? { element: workRedirect }
+          : { Component: DataSourcesPage })
       },
       {
         path: 'data/active-tickets',

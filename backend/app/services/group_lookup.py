@@ -56,7 +56,7 @@ def _normalize_group(item):
         name = group_id
 
     return {
-        'id': group_id,
+        'group_id': group_id,
         'name': name,
         'description': description,
         'tags': normalize_tags(tags),
@@ -144,7 +144,7 @@ def search_cached_groups(search_text, limit=20):
         )
         return [
             {
-                'id': group.id,
+                'group_id': group.id,
                 'name': group.name,
                 'description': group.description or '',
                 'tags': group.tags or '',
@@ -164,12 +164,12 @@ def upsert_groups(groups):
     for group in groups:
         normalized = _normalize_group(group)
         if normalized:
-            unique_groups[normalized['id']] = normalized
+            unique_groups[normalized['group_id']] = normalized
 
     session = SessionLocal()
     try:
         for group in unique_groups.values():
-            existing = session.get(Group, group['id'])
+            existing = session.get(Group, group['group_id'])
             if existing:
                 if group['name'] and not (existing.name or '').strip():
                     existing.name = group['name']
@@ -177,17 +177,17 @@ def upsert_groups(groups):
                 if group['description'] and not (existing.description or '').strip():
                     existing.description = group['description']
                     updated += 1
-                merged_tags = ', '.join(merge_group_tags(existing.tags, group['tags'], existing.name or group['name'] or group['id']))
+                merged_tags = ', '.join(merge_group_tags(existing.tags, group['tags'], existing.name or group['name'] or group['group_id']))
                 if merged_tags != (existing.tags or ''):
                     existing.tags = merged_tags or None
                     updated += 1
             else:
                 session.add(
                     Group(
-                        id=group['id'],
+                        id=group['group_id'],
                         name=group['name'],
                         description=group['description'] or None,
-                        tags=', '.join(merge_group_tags('', group['tags'], group['name'] or group['id'])) or None,
+                        tags=', '.join(merge_group_tags('', group['tags'], group['name'] or group['group_id'])) or None,
                     )
                 )
                 created += 1
@@ -248,7 +248,7 @@ def resolve_groups_by_ids(group_ids):
                 known = False
 
             items.append({
-                'id': group_id,
+                'group_id': group_id,
                 'name': name,
                 'description': existing.description if existing else '',
                 'tags': existing.tags if existing else '',
@@ -382,6 +382,7 @@ def get_user_groups_via_flow(user_opid, user_id=None):
         return {
             'source': 'flow',
             'userOpid': normalized_user_opid,
+            'groups': [{'group_id': str(group.get('group_id') or '').strip()} for group in resolved['items'] if str(group.get('group_id') or '').strip()],
             'items': resolved['items'],
             'identifiedCount': resolved['identifiedCount'],
             'totalCount': resolved['totalCount'],
@@ -395,3 +396,21 @@ def get_user_groups_via_flow(user_opid, user_id=None):
         {'scriptName': script_name, 'variables': {'user_opid': normalized_user_opid}},
         _execute,
     )
+
+
+def user_group_id_set(user_groups):
+    groups = user_groups if isinstance(user_groups, list) else []
+    return {
+        str(group.get('group_id') or '').strip()
+        for group in groups
+        if isinstance(group, dict) and str(group.get('group_id') or '').strip()
+    }
+
+
+def has_group(user_group_ids, group_id):
+    expected = str(group_id or '').strip()
+    return bool(expected and expected in (user_group_ids or set()))
+
+
+def user_has_group(user_groups, group_id):
+    return has_group(user_group_id_set(user_groups), group_id)

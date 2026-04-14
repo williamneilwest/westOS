@@ -6,6 +6,7 @@ import { lookupReferenceGroups } from '../../app/services/api';
 import { Card, CardHeader } from '../../app/ui/Card';
 import { EmptyState } from '../../app/ui/EmptyState';
 import { SectionHeader } from '../../app/ui/SectionHeader';
+import { cacheGroupLookupResults } from './userGroupsCache';
 
 export function GroupSearchToolPage() {
   const location = useLocation();
@@ -30,6 +31,7 @@ export function GroupSearchToolPage() {
     try {
       const result = await lookupReferenceGroups(query);
       const items = Array.isArray(result.items) ? result.items : [];
+      cacheGroupLookupResults(items);
       setLookupResults(items);
       setLookupState({
         loading: false,
@@ -104,10 +106,10 @@ export function GroupSearchToolPage() {
               </thead>
               <tbody>
                 {lookupResults.map((group) => (
-                  <tr key={`lookup-${group.id}`}>
+                  <tr key={`lookup-${group.group_id}`}>
                     <td>
-                      <span className="data-table__cell-content" title={group.id}>
-                        {group.id}
+                      <span className="data-table__cell-content" title={group.group_id}>
+                        {group.group_id}
                       </span>
                     </td>
                     <td>

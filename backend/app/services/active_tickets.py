@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .data_processing import normalize_headers
+from .data_sources.manager import get_source
 from ..utils.storage import get_uploads_dir
 
 
@@ -171,6 +172,33 @@ def _parse_csv_bytes(content):
     return {
         'columns': headers,
         'rows': rows,
+    }
+
+
+def _dataset_from_rows(rows):
+    source_rows = rows if isinstance(rows, list) else []
+    normalized_rows = []
+    key_order = []
+
+    for row in source_rows:
+        source_row = row if isinstance(row, dict) else {}
+        keys = [str(key or '').strip() for key in source_row.keys()]
+        for key in keys:
+            if key and key not in key_order:
+                key_order.append(key)
+
+        header_map = dict(zip(key_order, normalize_headers(key_order), strict=False))
+        aligned = {header_map.get(str(key), str(key)): value for key, value in source_row.items()}
+        normalized, _ = normalize_ticket_row(aligned)
+        normalized_rows.append(normalized)
+
+    discovered_columns = normalize_headers(key_order)
+    if 'combined_notes' not in discovered_columns:
+        discovered_columns.append('combined_notes')
+
+    return {
+        'columns': discovered_columns,
+        'rows': normalized_rows,
     }
 
 
@@ -564,6 +592,17 @@ def load_active_ticket_dataset(force_reload=False):
             }
 
     path = _resolve_active_ticket_dataset_path()
+
+    source_rows = get_source('active_tickets')
+    if isinstance(source_rows, list) and source_rows:
+        _cached_dataset = _dataset_from_rows(source_rows)
+        _cached_metadata = {
+            **_read_source_metadata(),
+            'source': 'data_source',
+            'file_name': 'active_tickets',
+            'file_mtime': None,
+        }
+        return _cached_dataset
 
     if path is None or not path.exists():
         _cached_dataset = {

@@ -197,6 +197,61 @@ export function uploadDataFile(file) {
   });
 }
 
+export function getDataSources() {
+  return request(backendBaseUrl, '/api/data-sources');
+}
+
+export function updateDataSource(sourceId, { role = '' } = {}) {
+  return request(backendBaseUrl, `/api/data-sources/${encodeURIComponent(String(sourceId || ''))}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      role,
+    }),
+  });
+}
+
+export function promoteUploadToSource({ filePath = '', name = '', type = 'csv', schemaVersion = '' } = {}) {
+  return request(backendBaseUrl, '/api/data-sources/promote', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      file_path: filePath,
+      name,
+      type,
+      schema_version: schemaVersion,
+    }),
+  });
+}
+
+export function getDataSourceData(name, { normalized = true } = {}) {
+  const params = new URLSearchParams();
+  params.set('normalized', String(Boolean(normalized)));
+  return request(backendBaseUrl, `/api/data-sources/${encodeURIComponent(String(name || '').trim())}?${params.toString()}`);
+}
+
+export function getLegacyDataSourceData(name, { normalized = true } = {}) {
+  const params = new URLSearchParams();
+  params.set('normalized', String(Boolean(normalized)));
+  return request(backendBaseUrl, `/api/data/${encodeURIComponent(String(name || '').trim())}?${params.toString()}`);
+}
+
+export function searchUsers(query) {
+  const params = new URLSearchParams();
+  params.set('q', String(query || '').trim());
+  return request(backendBaseUrl, `/api/search-users?${params.toString()}`);
+}
+
+export function searchUsersLive(query) {
+  const params = new URLSearchParams();
+  params.set('q', String(query || '').trim());
+  return request(backendBaseUrl, `/api/search-users-live?${params.toString()}`);
+}
+
 export function getDataTools(fileType) {
   return request(backendBaseUrl, `/api/data/tools/${encodeURIComponent(fileType)}`);
 }
@@ -309,20 +364,48 @@ export function getProcessedKnowledgeBaseDocument(filename) {
   return request(backendBaseUrl, `/api/kb/processed/${encodeURIComponent(filename)}`);
 }
 
+function normalizeGroupRecord(group) {
+  const groupId = String(group?.group_id || group?.id || '').trim();
+  return {
+    group_id: groupId,
+    name: String(group?.name || groupId).trim() || groupId,
+    description: String(group?.description || '').trim(),
+    tags: group?.tags || '',
+    identified: Boolean(group?.identified),
+  };
+}
+
 export function lookupReferenceGroups(searchText) {
-  return request(backendBaseUrl, `/api/reference/groups/lookup?q=${encodeURIComponent(searchText)}`);
+  return request(backendBaseUrl, `/api/reference/groups/lookup?q=${encodeURIComponent(searchText)}`)
+    .then((payload) => {
+      const items = Array.isArray(payload?.items) ? payload.items.map(normalizeGroupRecord) : [];
+      return { ...(payload || {}), items };
+    });
 }
 
 export function lookupReferenceGroupsFromFlow(searchText) {
-  return request(backendBaseUrl, `/api/reference/groups/lookup-flow?q=${encodeURIComponent(searchText)}`);
+  return request(backendBaseUrl, `/api/reference/groups/lookup-flow?q=${encodeURIComponent(searchText)}`)
+    .then((payload) => {
+      const items = Array.isArray(payload?.items) ? payload.items.map(normalizeGroupRecord) : [];
+      return { ...(payload || {}), items };
+    });
 }
 
 export function getUserGroups(userOpid) {
-  return request(backendBaseUrl, `/api/reference/groups/user-membership?user_opid=${encodeURIComponent(userOpid)}`);
+  return request(backendBaseUrl, `/api/reference/groups/user-membership?user_opid=${encodeURIComponent(userOpid)}`)
+    .then((payload) => {
+      const groups = Array.isArray(payload?.groups)
+        ? payload.groups.map((group) => ({ group_id: String(group?.group_id || '').trim() })).filter((group) => group.group_id)
+        : Array.isArray(payload?.items)
+          ? payload.items.map((group) => ({ group_id: String(group?.group_id || group?.id || '').trim() })).filter((group) => group.group_id)
+          : [];
+      return { ...(payload || {}), groups };
+    });
 }
 
 export function getReferenceGroups() {
-  return request(backendBaseUrl, '/api/reference/groups');
+  return request(backendBaseUrl, '/api/reference/groups')
+    .then((payload) => (Array.isArray(payload) ? payload.map(normalizeGroupRecord) : []));
 }
 
 export function upsertReferenceGroups(groups) {
@@ -593,6 +676,13 @@ export function runFlow(template, variables = {}) {
 
 export function getSoftwareRegistry() {
   return request(backendBaseUrl, '/api/software');
+}
+
+export function searchSoftwareRegistry(query, { limit = 50 } = {}) {
+  const params = new URLSearchParams();
+  params.set('q', String(query || '').trim());
+  params.set('limit', String(limit || 50));
+  return request(backendBaseUrl, `/api/software/search?${params.toString()}`);
 }
 
 export function uploadSoftwareRegistry(file, { mode = 'replace' } = {}) {
