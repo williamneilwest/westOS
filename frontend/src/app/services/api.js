@@ -160,8 +160,14 @@ export function getRecentCsvAnalysisFile(analysisId) {
   return requestText(backendBaseUrl, `/flows/work/recent-analyses/${analysisId}/file`);
 }
 
-export function getTicket(ticketId) {
-  return request(backendBaseUrl, `/api/tickets/${encodeURIComponent(ticketId)}`);
+export function getTicket(ticketId, { source = '' } = {}) {
+  const params = new URLSearchParams();
+  const normalizedSource = String(source || '').trim();
+  if (normalizedSource) {
+    params.set('source', normalizedSource);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return request(backendBaseUrl, `/api/tickets/${encodeURIComponent(ticketId)}${suffix}`);
 }
 
 export function summarizeTicket(ticketId, payload = {}) {
@@ -364,6 +370,12 @@ export function updateDeviceLocationSource(sourceKey) {
       source_key: String(sourceKey || '').trim(),
     }),
   });
+}
+
+export function searchHardwareRmrByPcName(query) {
+  const params = new URLSearchParams();
+  params.set('q', String(query || '').trim());
+  return request(backendBaseUrl, `/api/hardware-rmr/search?${params.toString()}`);
 }
 
 export function searchUsersLive(query, { refresh = false } = {}) {

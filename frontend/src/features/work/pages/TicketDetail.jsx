@@ -177,6 +177,12 @@ export function TicketDetail() {
   const { authenticated } = useCurrentUser();
   const { ticketId: routeTicketId = '' } = useParams();
   const location = useLocation();
+  const sourceFromQuery = useMemo(() => {
+    const params = new URLSearchParams(location.search || '');
+    return String(params.get('source') || '').trim();
+  }, [location.search]);
+  const sourceFromState = String(location.state?.sourceKey || '').trim();
+  const ticketSourceKey = sourceFromQuery || sourceFromState;
   const goBack = useBackNavigation('/app/work/active-tickets');
   const backLabel = location.state?.label || 'Active Tickets';
   const decodedTicketId = decodeURIComponent(routeTicketId);
@@ -271,7 +277,7 @@ export function TicketDetail() {
       setError('');
 
       try {
-        const result = await getTicket(decodedTicketId);
+        const result = await getTicket(decodedTicketId, { source: ticketSourceKey });
 
         if (!isMounted) {
           return;
@@ -302,7 +308,7 @@ export function TicketDetail() {
     return () => {
       isMounted = false;
     };
-  }, [decodedTicketId, ticket]);
+  }, [decodedTicketId, ticket, ticketSourceKey]);
 
   useEffect(() => {
     let isMounted = true;

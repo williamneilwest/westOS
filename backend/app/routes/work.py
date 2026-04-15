@@ -27,11 +27,37 @@ from ..services.active_tickets import (
 from ..services.analysis_store import get_analysis_file, list_recent_analyses, save_analysis
 from ..services.csv_analyzer import build_csv_analysis
 from ..services.data_source_service import register_source
+from ..services.data_sources.manager import get_source
 from ..services.authz import RUN_AI, require_auth, require_permission
 from ..services.ai_client import build_compat_chat_response, call_gateway_chat
 
 work_bp = Blueprint('work', __name__)
 LOGGER = logging.getLogger(__name__)
+SOURCE_TICKET_ID_KEYS = ('ticket', 'number', 'ticket_number', 'id', 'sys_id', 'u_task_1')
+
+
+def _find_ticket_in_source(source_key: str, ticket_id: str):
+    normalized_source_key = str(source_key or '').strip()
+    normalized_ticket_id = str(ticket_id or '').strip()
+    if not normalized_source_key or not normalized_ticket_id:
+        return None
+
+    rows = get_source(normalized_source_key, normalized=False)
+    if not isinstance(rows, list):
+        return None
+
+    target = normalized_ticket_id.lower()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for key in SOURCE_TICKET_ID_KEYS:
+            value = row.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text and text.lower() == target:
+                return row
+    return None
 
 @work_bp.get('/flows/work/recent-analyses')
 def recent_analyses():
@@ -241,6 +267,12 @@ def ticket_todo():
 
 @work_bp.get('/api/tickets/<ticket_id>')
 def get_ticket(ticket_id):
+    source_key = str(request.args.get('source') or '').strip()
+    if source_key:
+        source_ticket = _find_ticket_in_source(source_key, ticket_id)
+        if source_ticket:
+            return success_response(source_ticket)
+
     try:
         ticket = get_ticket_by_id(ticket_id)
     except ValueError as error:

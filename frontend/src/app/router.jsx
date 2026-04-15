@@ -8,6 +8,7 @@ import { DocumentPage } from '../features/uploads/DocumentPage';
 import { ProcessedKBPage } from '../features/kb/ProcessedKBPage';
 import { WorkPage } from '../features/work/WorkPage';
 import { TicketDetail } from '../features/work/pages/TicketDetail';
+import { HardwareRecordPage } from '../features/work/pages/HardwareRecordPage';
 import { WorkInsightsPage } from '../features/work/WorkInsightsPage';
 import { WorkHubPage } from '../features/work/WorkHubPage';
 import { WorkDomainPage } from '../features/work/WorkDomainPage';
@@ -277,6 +278,10 @@ export const router = createBrowserRouter(
         element: <WorkDomainPage domain="hardware" />
       },
       {
+        path: 'work/hardware/rmr-record',
+        Component: HardwareRecordPage
+      },
+      {
         path: 'device-location',
         element: <WorkDomainPage domain="hardware" />
       },
@@ -353,6 +358,10 @@ export const router = createBrowserRouter(
   {
     path: '/work/hardware',
     element: <Navigate replace to="/app/work/hardware" />
+  },
+  {
+    path: '/work/hardware/rmr-record',
+    element: <Navigate replace to="/app/work/hardware/rmr-record" />
   },
   {
     path: '/device-location',
