@@ -2805,7 +2805,7 @@ textarea {
 
 .entity-tools-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(440px, 0.95fr) minmax(0, 1.25fr);
   gap: 0.75rem;
   align-items: start;
 }
@@ -2815,6 +2815,47 @@ textarea {
   min-width: 0;
   display: grid;
   gap: 0.75rem;
+}
+
+.entity-tools-layout__left--tight {
+  gap: 0.55rem;
+}
+
+.entity-tools-layout__right--primary {
+  align-content: stretch;
+}
+
+.groups-search-card {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 270px);
+}
+
+.association-list.groups-search-results,
+.association-list.user-groups-context-list {
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.association-list.groups-search-results {
+  flex: 1 1 auto;
+  min-height: 320px;
+  max-height: none;
+}
+
+.association-list.user-groups-context-list {
+  max-height: min(34vh, 360px);
+}
+
+.groups-search-results__item,
+.user-groups-context-list__item {
+  gap: 0.12rem;
+  padding: 0.58rem 0.68rem;
+}
+
+.groups-search-results__item .association-list__meta,
+.user-groups-context-list__item .association-list__meta {
+  font-size: 0.82rem;
 }
 
 .entity-tools-list {
@@ -6773,12 +6814,33 @@ textarea {
   gap: 0.7rem;
 }
 
+.user-context-card .association-summary {
+  gap: 0.45rem;
+}
+
 .association-summary__row {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
   padding-bottom: 0.7rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.user-context-card .association-summary__row {
+  padding-bottom: 0.42rem;
+}
+
+.user-context-card .association-summary__row > span {
+  white-space: nowrap;
+}
+
+.user-context-card .association-summary__row > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
 }
 
 .association-summary__row:last-child {
@@ -6903,6 +6965,12 @@ textarea {
 .association-status--assigned {
   color: #9cf7e7;
   background: rgba(16, 185, 129, 0.2);
+}
+
+.association-status--member {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.24);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35), 0 0 10px rgba(34, 197, 94, 0.22);
 }
 
 .association-status--live {

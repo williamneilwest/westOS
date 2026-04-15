@@ -45,6 +45,7 @@ WORK_ALLOWED_PREFIXES = (
     '/api/software',
     '/api/software-registry',
     '/api/work/codes',
+    '/api/device-locations',
 )
 PUBLIC_AUTH_PATH_PREFIX = '/api/auth/'
 PUBLIC_WEBHOOK_PREFIXES = (

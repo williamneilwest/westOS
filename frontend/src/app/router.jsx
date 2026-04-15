@@ -25,6 +25,7 @@ import { AdminFlowsPage } from '../features/admin/AdminFlowsPage';
 import { FlowBuilderPage } from '../features/admin/FlowBuilderPage';
 import { AppDesignerPage } from '../features/dev/AppDesignerPage';
 import { DataSourcesPage } from '../features/data/DataSourcesPage';
+import { DataRecordPage } from '../pages/DataRecordPage';
 import { AppShell } from './shell/AppShell';
 import { isWorkDomainHost } from './constants/domain';
 import { RequireAuth } from './router/RequireAuth';
@@ -140,6 +141,12 @@ export const router = createBrowserRouter(
         ...(isWorkSubdomain
           ? { element: workRedirect }
           : { Component: DataSourcesPage })
+      },
+      {
+        path: 'data/view/:source/:id',
+        ...(isWorkSubdomain
+          ? { element: workRedirect }
+          : { Component: DataRecordPage })
       },
       {
         path: 'data/active-tickets',

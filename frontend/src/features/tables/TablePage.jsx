@@ -139,6 +139,9 @@ export function TablePage() {
   const sourceUrl = searchParams.get('url') || '';
   const sourceFileName = searchParams.get('fileName') || '';
   const sourceModifiedAt = searchParams.get('modifiedAt') || '';
+  const sourceKeyFromParams = searchParams.get('source') || searchParams.get('sourceKey') || '';
+  const sourceKeyFromState = String(location.state?.sourceKey || location.state?.source || '').trim();
+  const sourceKey = String(sourceKeyFromParams || sourceKeyFromState).trim().toLowerCase();
   const initialDataset = getCachedWorkDataset();
   const shouldUseCachedDataset = !sourceUrl;
   const [dataset, setDataset] = useState(() =>
@@ -372,14 +375,13 @@ export function TablePage() {
   }
 
   function handleRowSelect(row) {
-    const ticketId = getTicketId(row, dataset.columns || []);
-
-    if (ticketId && ticketId !== 'Untitled ticket') {
+    const rowId = row?.id;
+    if (sourceKey && rowId !== undefined && rowId !== null && String(rowId).trim()) {
       window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-      navigate(`/tickets/${encodeURIComponent(ticketId)}`, {
+      navigate(`/app/data/view/${encodeURIComponent(sourceKey)}/${encodeURIComponent(String(rowId).trim())}`, {
         state: {
           from: `${location.pathname}${location.search || ''}`,
-          label: location.state?.label || 'Table Viewer',
+          label: location.state?.label || 'Data Viewer',
         },
       });
       return;

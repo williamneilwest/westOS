@@ -287,6 +287,18 @@ export function getDataSourceData(name, { normalized = true } = {}) {
   return request(backendBaseUrl, `/api/data-sources/${encodeURIComponent(String(name || '').trim())}?${params.toString()}`);
 }
 
+export function getDataSourceRecord(source, id) {
+  const normalizedSource = String(source || '').trim();
+  const normalizedId = String(id || '').trim();
+  if (!normalizedSource || !normalizedId) {
+    throw new Error('source and id are required.');
+  }
+  return request(
+    backendBaseUrl,
+    `/api/data-sources/${encodeURIComponent(normalizedSource)}/${encodeURIComponent(normalizedId)}`
+  );
+}
+
 export function deleteDataSourceRow(name, filters = {}) {
   return request(backendBaseUrl, `/api/data-sources/${encodeURIComponent(String(name || '').trim())}/rows`, {
     method: 'DELETE',
@@ -307,6 +319,19 @@ export function searchUsers(query) {
   const params = new URLSearchParams();
   params.set('q', String(query || '').trim());
   return request(backendBaseUrl, `/api/search-users?${params.toString()}`);
+}
+
+export function searchDeviceLocations({ query = '', data = [] } = {}) {
+  return request(backendBaseUrl, '/api/device-locations/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      query: String(query || '').trim(),
+      data: Array.isArray(data) ? data : [],
+    }),
+  });
 }
 
 export function searchUsersLive(query, { refresh = false } = {}) {

@@ -22,6 +22,7 @@ from .software import software_bp
 from .codes import codes_bp
 from .data_sources import data_sources_bp
 from .dev import dev_bp
+from .device_locations import device_locations_bp
 
 
 def register_routes(app):
@@ -49,3 +50,4 @@ def register_routes(app):
     app.register_blueprint(codes_bp)
     app.register_blueprint(data_sources_bp)
     app.register_blueprint(dev_bp)
+    app.register_blueprint(device_locations_bp)
