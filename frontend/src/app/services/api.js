@@ -242,15 +242,23 @@ export function getDataSources() {
   return request(backendBaseUrl, '/api/data-sources');
 }
 
-export function updateDataSource(sourceId, { role = '' } = {}) {
+export function updateDataSource(sourceId, { role = '', key = '', sourceName = '' } = {}) {
+  const payload = {};
+  if (role !== undefined && role !== null && String(role).trim()) {
+    payload.role = String(role).trim();
+  }
+  if (key !== undefined && key !== null && String(key).trim()) {
+    payload.key = String(key).trim();
+  }
+  if (sourceName !== undefined && sourceName !== null && String(sourceName).trim()) {
+    payload.source_name = String(sourceName).trim();
+  }
   return request(backendBaseUrl, `/api/data-sources/${encodeURIComponent(String(sourceId || ''))}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      role,
-    }),
+    body: JSON.stringify(payload),
   });
 }
 

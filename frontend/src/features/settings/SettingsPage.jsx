@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, Database, RotateCcw, Shield, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../../app/ui/Button';
 import { getSettings } from '../../app/services/api';
 import { useCurrentUser } from '../../app/hooks/useCurrentUser';
@@ -24,6 +25,7 @@ function PlaceholderSettingCard({ icon: Icon, title, description }) {
 }
 
 export function SettingsPage() {
+  const navigate = useNavigate();
   const { isAdmin } = useCurrentUser();
   const [settings, setSettings] = useState(null);
   const [error, setError] = useState('');
@@ -167,6 +169,32 @@ export function SettingsPage() {
           title="Workspace Preferences"
         />
       </div>
+
+      <Card className="reference-card reference-card--wide">
+        <CardHeader
+          eyebrow="System"
+          title="System Pages"
+          description="Access pages moved out of sidebar tabs."
+        />
+        <div className="stack-row__actions">
+          <button type="button" className="compact-toggle" onClick={() => navigate('/app/profile')}>
+            Profile
+          </button>
+          {isAdmin ? (
+            <>
+              <button type="button" className="compact-toggle" onClick={() => navigate('/app/system')}>
+                System Viewer
+              </button>
+              <button type="button" className="compact-toggle" onClick={() => navigate('/app/flows')}>
+                Flows
+              </button>
+              <button type="button" className="compact-toggle" onClick={() => navigate('/app/dev/designer')}>
+                Dev
+              </button>
+            </>
+          ) : null}
+        </div>
+      </Card>
 
       {isAdmin ? (
         <Card className="reference-card reference-card--wide">
