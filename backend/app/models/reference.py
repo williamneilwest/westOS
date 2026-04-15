@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from sqlalchemy import String, Column, DateTime, Integer, ForeignKey, JSON, create_engine, inspect, text, Text
+from sqlalchemy import String, Column, DateTime, Integer, ForeignKey, JSON, Boolean, create_engine, inspect, text, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .platform import resolve_database_url
@@ -37,6 +37,8 @@ class User(Base):
     email = Column(String)
     job_title = Column(String)
     department = Column(String)
+    location = Column(String)
+    account_enabled = Column(Boolean)
     raw_json = Column(JSON)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     source = Column(String)
@@ -167,6 +169,10 @@ def _ensure_reference_user_columns():
         statements.append('ALTER TABLE ref_users ADD COLUMN job_title VARCHAR')
     if 'department' not in columns:
         statements.append('ALTER TABLE ref_users ADD COLUMN department VARCHAR')
+    if 'location' not in columns:
+        statements.append('ALTER TABLE ref_users ADD COLUMN location VARCHAR')
+    if 'account_enabled' not in columns:
+        statements.append('ALTER TABLE ref_users ADD COLUMN account_enabled BOOLEAN')
     if 'raw_json' not in columns:
         statements.append('ALTER TABLE ref_users ADD COLUMN raw_json JSON')
     if 'updated_at' not in columns:

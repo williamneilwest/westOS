@@ -254,6 +254,18 @@ export function updateDataSource(sourceId, { role = '' } = {}) {
   });
 }
 
+export function deleteDataSource(sourceId, { dropTable = true } = {}) {
+  return request(backendBaseUrl, `/api/data-sources/${encodeURIComponent(String(sourceId || ''))}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      drop_table: Boolean(dropTable),
+    }),
+  });
+}
+
 export function promoteUploadToSource({ filePath = '', name = '', type = 'csv', schemaVersion = '' } = {}) {
   return request(backendBaseUrl, '/api/data-sources/promote', {
     method: 'POST',
@@ -275,6 +287,16 @@ export function getDataSourceData(name, { normalized = true } = {}) {
   return request(backendBaseUrl, `/api/data-sources/${encodeURIComponent(String(name || '').trim())}?${params.toString()}`);
 }
 
+export function deleteDataSourceRow(name, filters = {}) {
+  return request(backendBaseUrl, `/api/data-sources/${encodeURIComponent(String(name || '').trim())}/rows`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ filters }),
+  });
+}
+
 export function getLegacyDataSourceData(name, { normalized = true } = {}) {
   const params = new URLSearchParams();
   params.set('normalized', String(Boolean(normalized)));
@@ -287,9 +309,12 @@ export function searchUsers(query) {
   return request(backendBaseUrl, `/api/search-users?${params.toString()}`);
 }
 
-export function searchUsersLive(query) {
+export function searchUsersLive(query, { refresh = false } = {}) {
   const params = new URLSearchParams();
   params.set('q', String(query || '').trim());
+  if (refresh) {
+    params.set('refresh', 'true');
+  }
   return request(backendBaseUrl, `/api/search-users-live?${params.toString()}`);
 }
 

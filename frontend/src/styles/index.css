@@ -6905,6 +6905,11 @@ textarea {
   background: rgba(16, 185, 129, 0.2);
 }
 
+.association-status--live {
+  color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.24);
+}
+
 .association-status--missing {
   color: #fde68a;
   background: rgba(245, 158, 11, 0.22);

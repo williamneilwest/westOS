@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from sqlalchemy import desc
 
 from ..models.reference import Group, SessionLocal, init_db
 from ..services.authz import RUN_FLOWS_READ, RUN_FLOWS_WRITE, get_current_user, has_permission, require_permission
@@ -130,13 +131,34 @@ def search_groups():
 @group_cache_bp.get('/api/groups/search')
 def search_groups_cache_first():
     q = (request.args.get('q') or '').strip()
-    if not q:
-        return jsonify({'source': 'cache', 'results': []})
-
     refresh = _as_bool(request.args.get('refresh'), default=False)
     permission_error = require_permission(RUN_FLOWS_READ)
     if permission_error is not None:
         return permission_error
+
+    if not q:
+        _ensure_db()
+        session = SessionLocal()
+        try:
+            groups = (
+                session.query(Group)
+                .order_by(desc(Group.updated_at), Group.name.asc(), Group.id.asc())
+                .limit(10)
+                .all()
+            )
+            return jsonify({
+                'source': 'cache',
+                'results': [
+                    {
+                        'id': str(group.id or '').strip(),
+                        'name': str(group.name or group.id or '').strip(),
+                        'description': str(group.description or '').strip(),
+                    }
+                    for group in groups
+                ],
+            })
+        finally:
+            session.close()
 
     local_results = search_cached_groups(q)
     if local_results and not refresh:

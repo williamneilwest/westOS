@@ -499,7 +499,7 @@ export function UserGroupAssociationPage({
                         className={isSelected ? 'association-list__item association-list__item--selected' : 'association-list__item'}
                         onClick={() => setSelectedUserId(user.opid)}
                       >
-                        <span className="association-list__title">{user.display_name || user.opid}</span>
+                        <span className="association-list__title">{user.display_name || 'Unknown User'}</span>
                         <span className="association-list__meta">{user.opid}</span>
                         {user.email ? <span className="association-list__meta">{user.email}</span> : null}
                       </button>
@@ -638,7 +638,7 @@ export function UserGroupAssociationPage({
             <div className="association-summary">
               <div className="association-summary__row">
                 <span>User</span>
-                <strong>{effectiveSelectedUser ? effectiveSelectedUser.display_name || effectiveSelectedUser.opid : 'Select a user'}</strong>
+                <strong>{effectiveSelectedUser ? effectiveSelectedUser.display_name || 'Unknown User' : 'Select a user'}</strong>
               </div>
               <div className="association-summary__row">
                 <span>Email</span>

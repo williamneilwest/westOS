@@ -428,7 +428,7 @@ export function GetUserGroupsPage() {
                   >
                     <span className="stack-row__label">
                       <span>
-                        <strong>{item.display_name || item.opid}</strong>
+                        <strong>{item.display_name || 'Unknown User'}</strong>
                         <small>{item.opid}</small>
                         {item.email ? <small>{item.email}</small> : null}
                       </span>
@@ -444,11 +444,11 @@ export function GetUserGroupsPage() {
 
         <main className="user-context-col user-context-col--center">
           <Card>
-            <CardHeader eyebrow="Selected User" title={selectedUser?.display_name || selectedUser?.opid || 'No user selected'} action={<span className="icon-badge"><UserRound size={16} /></span>} />
+            <CardHeader eyebrow="Selected User" title={selectedUser?.display_name || 'Unknown User'} action={<span className="icon-badge"><UserRound size={16} /></span>} />
             {selectedUser ? (
               <div className="dataset-metrics-grid">
                 <div className="metric-tile"><span>OPID</span><strong>{selectedUser.opid}</strong></div>
-                <div className="metric-tile"><span>Name</span><strong>{selectedUser.display_name || 'Unknown'}</strong></div>
+                <div className="metric-tile"><span>Name</span><strong>{selectedUser.display_name || 'Unknown User'}</strong></div>
                 <div className="metric-tile"><span>Department</span><strong>{String(selectedUser.department || '').trim() || 'Unknown'}</strong></div>
                 <div className="metric-tile"><span>Location</span><strong>{resolvedLocation}</strong></div>
                 <div className="metric-tile"><span>Device Count</span><strong>{userDevices.length}</strong></div>

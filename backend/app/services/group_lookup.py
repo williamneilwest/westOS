@@ -1,26 +1,27 @@
 import json
 import os
 import logging
+from datetime import datetime, timezone
 from time import perf_counter
 
 import requests
 from sqlalchemy import func, or_
 
-from ..models.reference import Group, SessionLocal, init_db
+from ..models.reference import Group, SessionLocal, UserGroup, init_db
 from .group_metadata import merge_group_tags, normalize_tags
 from .flow_runs import track_flow_run
-from .entity_cache_service import (
-    get_cached_user_membership,
-    replace_user_groups,
-    upsert_user,
-)
-from .flow_ingest_service import ingest_flow_response
+from .entity_cache_service import get_cached_user_membership, upsert_user
+from .flow_router import route_flow_result
 
 
 DEFAULT_SCRIPT_NAME = 'Search Groups'
 DEFAULT_USER_GROUPS_SCRIPT_NAME = 'Get User Groups'
 DEFAULT_TIMEOUT_SECONDS = 20
 LOGGER = logging.getLogger(__name__)
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
 
 
 def _ensure_db():
@@ -291,7 +292,6 @@ def resolve_groups_by_ids(group_ids):
             for group in session.query(Group).filter(Group.id.in_(ordered_ids)).all()
         }
 
-        created = 0
         items = []
         identified_count = 0
 
@@ -303,9 +303,7 @@ def resolve_groups_by_ids(group_ids):
                 if known:
                     identified_count += 1
             else:
-                session.add(Group(id=group_id, name=group_id))
-                created += 1
-                name = group_id
+                name = ''
                 known = False
 
             items.append({
@@ -316,15 +314,53 @@ def resolve_groups_by_ids(group_ids):
                 'identified': known,
             })
 
-        if created:
-            session.commit()
-
         return {
             'items': items,
             'identifiedCount': identified_count,
             'totalCount': len(items),
-            'created': created,
+            'created': 0,
         }
+    finally:
+        session.close()
+
+
+def upsert_user_memberships(user_id, groups):
+    _ensure_db()
+    normalized_user_id = str(user_id or '').strip().lower()
+    if not normalized_user_id:
+        return 0
+
+    session = SessionLocal()
+    try:
+        session.query(UserGroup).filter(UserGroup.user_id == normalized_user_id).delete(synchronize_session=False)
+        inserted = 0
+        seen = set()
+
+        for group in groups if isinstance(groups, list) else []:
+            group_id = str(group.get('group_id') or group.get('id') or '').strip()
+            if not group_id:
+                continue
+            if 'metadata' in group_id.lower():
+                continue
+            if group_id in seen:
+                continue
+            seen.add(group_id)
+            session.add(
+                UserGroup(
+                    user_id=normalized_user_id,
+                    group_id=group_id,
+                    source='flow',
+                    last_synced=_utc_now(),
+                    updated_at=_utc_now(),
+                )
+            )
+            inserted += 1
+
+        session.commit()
+        return inserted
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
 
@@ -350,7 +386,7 @@ def lookup_groups_via_flow(search_text, user_id=None):
 
     def _execute():
         flow_groups = call_search_groups_flow(query)
-        ingest_flow_response({'groups': flow_groups})
+        route_flow_result('SearchGroups', {'items': flow_groups})
         groups = _extract_groups(flow_groups)
         upserted = upsert_groups(groups)
 
@@ -476,7 +512,7 @@ def get_user_groups_via_flow(user_opid, user_id=None):
         except ValueError:
             parsed_body = raw_text
 
-        ingest_flow_response(parsed_body)
+        route_flow_result('GetUserGroups', {'user_opid': normalized_user_opid, 'payload': parsed_body})
         resolved = resolve_groups_by_ids(_extract_group_ids(parsed_body))
         session = SessionLocal()
         try:
@@ -484,12 +520,9 @@ def get_user_groups_via_flow(user_opid, user_id=None):
                 session,
                 {
                     'id': normalized_user_opid,
-                    'name': normalized_user_opid,
-                    'email': '',
                     'source': 'flow',
                 },
             )
-            replace_user_groups(session, normalized_user_opid, resolved['items'], source='flow')
             session.commit()
         except Exception:
             session.rollback()

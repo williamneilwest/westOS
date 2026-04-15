@@ -22,7 +22,7 @@ def list_groups():
     try:
         groups = session.query(Group).all()
         register_source(
-            key='reference_groups',
+            key='groups',
             name='Groups',
             table_name='ref_groups',
             row_count=len(groups),
@@ -84,7 +84,7 @@ def upsert_groups():
         session.commit()
         count = int(session.query(Group).count())
         register_source(
-            key='reference_groups',
+            key='groups',
             name='Groups',
             table_name='ref_groups',
             row_count=count,
