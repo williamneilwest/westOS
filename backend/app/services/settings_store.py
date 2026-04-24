@@ -91,6 +91,29 @@ def get_ai_settings(defaults=None):
     return settings
 
 
+def get_keyword_settings(defaults=None):
+    settings = get_ai_settings(defaults=defaults)
+
+    if isinstance(settings.get('keyword_settings'), dict):
+        keyword_settings = settings.get('keyword_settings') or {}
+    else:
+        keyword_settings = {}
+
+    blocked_keywords = keyword_settings.get('do_not_use_keywords')
+    if not isinstance(blocked_keywords, list):
+        blocked_keywords = settings.get('do_not_use_keywords')
+
+    normalized_keywords = []
+    for value in blocked_keywords if isinstance(blocked_keywords, list) else []:
+        text = str(value or '').strip().lower()
+        if text and text not in normalized_keywords:
+            normalized_keywords.append(text)
+
+    return {
+        'do_not_use_keywords': normalized_keywords,
+    }
+
+
 def save_ai_settings(data, defaults=None):
     settings = get_ai_settings(defaults=defaults)
     settings = _normalize_settings(_deep_merge(settings, data or {}), defaults=defaults)

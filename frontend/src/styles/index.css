@@ -6884,6 +6884,23 @@ textarea {
   font-size: 0.9rem;
 }
 
+.user-record-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  color: var(--accent, #7dd3fc);
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
+  font: inherit;
+  cursor: pointer;
+}
+
+.user-record-link:hover {
+  color: #bae6fd;
+}
+
 .association-summary {
   display: grid;
   gap: 0.7rem;

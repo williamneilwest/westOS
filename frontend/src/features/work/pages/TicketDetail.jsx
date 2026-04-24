@@ -624,7 +624,7 @@ export function TicketDetail() {
             <div className="ticket-detail-hero">
               <div className="ticket-detail-hero__item">
                 <UserRound size={14} />
-                <span>{linkifyText(getTicketAssignee(ticket, columns))}</span>
+                <span>{getTicketAssignee(ticket, columns)}</span>
               </div>
               <div className="ticket-detail-hero__item">
                 <Clock3 size={14} />

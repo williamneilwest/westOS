@@ -221,6 +221,7 @@ function buildUserContext(selectedUser, cacheMap) {
   const cachedCount = Number(raw?.totalCount ?? raw?.total_count ?? groups.length) || groups.length;
 
   return {
+    ...(raw && typeof raw === 'object' ? raw : {}),
     opid: selectedUser.opid,
     display_name: selectedUser.display_name || selectedUser.name || null,
     email: selectedUser.email || null,
@@ -233,6 +234,68 @@ function buildUserContext(selectedUser, cacheMap) {
     last_updated: raw?.cachedAt || raw?.cached_at || selectedUser.cached_at || null,
     source: raw?.source || selectedUser.source || 'cache',
   };
+}
+
+function buildUserFieldEntries(record, normalizedUser = null) {
+  const normalized = normalizedUser || normalizeSourceUser(record) || {};
+  const hiddenFieldKeys = new Set([
+    'user',
+    'user_name',
+    'u_peoplesoft_location',
+    'source',
+    'groups',
+    'items',
+    'resolvedGroups',
+    'cachedAt',
+    'cached_at',
+    'created',
+    '__fallback_used',
+  ]);
+
+  const seenFieldValues = new Set();
+
+  return Object.entries(record || {})
+    .filter(([key, value]) => {
+      if (value === null || value === undefined) {
+        return false;
+      }
+      if (hiddenFieldKeys.has(String(key || '').trim())) {
+        return false;
+      }
+      if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
+        return false;
+      }
+      const text = String(value).trim();
+      if (!text) {
+        return false;
+      }
+      if (key === 'title' && text === String(record?.job_title || '').trim()) {
+        return false;
+      }
+      if (key === 'epic_group_name' && text === String(record?.u_epic_assignment_group || '').trim()) {
+        return false;
+      }
+      if (key === 'display_name' && text === String(normalized.display_name || '').trim()) {
+        return false;
+      }
+      if (key === 'opid' && text === String(normalized.opid || '').trim()) {
+        return false;
+      }
+      const dedupeKey = `${getPreferredUserFieldLabel(key).toLowerCase()}::${text.toLowerCase()}`;
+      if (seenFieldValues.has(dedupeKey)) {
+        return false;
+      }
+      seenFieldValues.add(dedupeKey);
+      return true;
+    })
+    .sort(([leftKey], [rightKey]) => {
+      const leftPriority = getUserFieldPriority(leftKey);
+      const rightPriority = getUserFieldPriority(rightKey);
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+      return getPreferredUserFieldLabel(leftKey).localeCompare(getPreferredUserFieldLabel(rightKey));
+    });
 }
 
 function isPeopleSoftBackupUser(user) {
@@ -673,44 +736,7 @@ function UsersEntityWorkspace() {
                 }
                 const isSelected = normalized.opid === selectedUserOpid;
                 const accountEnabled = toBoolean(result?.account_enabled);
-                const hiddenFieldKeys = new Set([
-                  'user_name',
-                  'u_peoplesoft_location',
-                  'source',
-                  'job_title',
-                ]);
-                const fieldEntries = Object.entries(result || {}).filter(([key, value]) => {
-                  if (value === null || value === undefined) {
-                    return false;
-                  }
-                  if (hiddenFieldKeys.has(String(key || '').trim())) {
-                    return false;
-                  }
-                  const text = String(value).trim();
-                  if (!text) {
-                    return false;
-                  }
-                  if (key === 'title' && text === String(result?.job_title || '').trim()) {
-                    return false;
-                  }
-                  if (key === 'epic_group_name' && text === String(result?.u_epic_assignment_group || '').trim()) {
-                    return false;
-                  }
-                  if (key === 'display_name' && text === String(normalized.display_name || '').trim()) {
-                    return false;
-                  }
-                  if (key === 'opid' && text === String(normalized.opid || '').trim()) {
-                    return false;
-                  }
-                  return true;
-                }).sort(([leftKey], [rightKey]) => {
-                  const leftPriority = getUserFieldPriority(leftKey);
-                  const rightPriority = getUserFieldPriority(rightKey);
-                  if (leftPriority !== rightPriority) {
-                    return leftPriority - rightPriority;
-                  }
-                  return getPreferredUserFieldLabel(leftKey).localeCompare(getPreferredUserFieldLabel(rightKey));
-                });
+                const fieldEntries = buildUserFieldEntries(result, normalized);
                 return (
                   <div
                     key={`search-${normalized.opid}`}

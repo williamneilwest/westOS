@@ -1,5 +1,6 @@
 import {
   Barcode,
+  CheckCircle2,
   Clock3,
   FileSpreadsheet,
   HardDrive,
@@ -10,7 +11,7 @@ import {
   Printer,
   Search,
   Shield,
-  Ticket,
+  Upload,
   User,
   Users,
   Wrench,
@@ -31,6 +32,12 @@ const domainCards = [
     description: 'Card-based triage view with fast ticket inspection and panel details.',
     icon: FileSpreadsheet,
     href: '/app/work/active-tickets',
+  },
+  {
+    title: 'Closed Tickets',
+    description: 'Separate closed and resolved ticket review with assignee and timeframe filters.',
+    icon: CheckCircle2,
+    href: '/app/work/closed-tickets',
   },
   {
     title: 'Users',
@@ -71,12 +78,16 @@ const domainCards = [
 ];
 
 const quickActionChips = [
+  { label: 'Active Tickets', href: '/app/work/active-tickets', icon: FileSpreadsheet },
+  { label: 'Closed Tickets', href: '/app/work/closed-tickets', icon: CheckCircle2 },
+  { label: 'Hardware', href: '/app/work/hardware', icon: Shield },
   { label: 'Register Printer', href: '/app/work/printers', icon: Printer },
   { label: 'Lookup User', href: '/app/work/users', icon: Users },
-  { label: 'Lookup Device', href: '/app/work/groups', icon: Search },
+  { label: 'Lookup Device', href: '/app/work/devices', icon: Search },
   { label: 'Open KB', href: '/app/kb', icon: BookOpen },
-  { label: 'Upload CSV', href: '/app/uploads', icon: FileSpreadsheet },
+  { label: 'Software', href: '/app/work/software', icon: HardDrive },
   { label: 'Codes', href: '/app/work/codes', icon: Barcode },
+  { label: 'Upload CSV', href: '/app/uploads', icon: Upload },
   { label: 'Run Script', href: '/app/work/users', icon: Wrench },
 ];
 

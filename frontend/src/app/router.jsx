@@ -25,6 +25,7 @@ import { TerminalPage } from '../features/admin/TerminalPage';
 import { AdminFlowsPage } from '../features/admin/AdminFlowsPage';
 import { FlowBuilderPage } from '../features/admin/FlowBuilderPage';
 import { AppDesignerPage } from '../features/dev/AppDesignerPage';
+import { ClosedTicketsPage } from '../features/closed-tickets/ClosedTicketsPage';
 import { DataSourcesPage } from '../features/data/DataSourcesPage';
 import { DataRecordPage } from '../pages/DataRecordPage';
 import { AppShell } from './shell/AppShell';
@@ -222,6 +223,10 @@ export const router = createBrowserRouter(
         element: <Navigate replace to="/app/work/active-tickets" />
       },
       {
+        path: 'work/closed-tickets',
+        Component: ClosedTicketsPage
+      },
+      {
         path: 'work/table',
         Component: TablePage
       },
@@ -302,6 +307,10 @@ export const router = createBrowserRouter(
   {
     path: '/work/tickets',
     element: <Navigate replace to="/app/work/active-tickets" />
+  },
+  {
+    path: '/work/closed-tickets',
+    element: <Navigate replace to="/app/work/closed-tickets" />
   },
   {
     path: '/work/ai-metrics',
