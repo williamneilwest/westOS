@@ -77,6 +77,30 @@ export const router = createBrowserRouter(
         {
           path: 'active-tickets',
           element: <WorkPage readOnly />
+        },
+        {
+          path: 'closed-tickets',
+          Component: ClosedTicketsPage
+        },
+        {
+          path: 'users',
+          element: <WorkDomainPage domain="users" />
+        },
+        {
+          path: 'groups',
+          element: <WorkDomainPage domain="groups" />
+        },
+        {
+          path: 'group-search',
+          element: <Navigate replace to="/app/work/groups" />
+        },
+        {
+          path: 'get-user-groups',
+          element: <Navigate replace to="/app/work/users" />
+        },
+        {
+          path: 'user-group-association',
+          element: <Navigate replace to="/app/work/users" />
         }
       ]
     },
