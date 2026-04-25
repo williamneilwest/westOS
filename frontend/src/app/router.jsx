@@ -251,6 +251,10 @@ export const router = createBrowserRouter(
         Component: ClosedTicketsPage
       },
       {
+        path: 'work/devices',
+        element: <Navigate replace to="/app/work/hardware" />
+      },
+      {
         path: 'work/table',
         Component: TablePage
       },
@@ -370,7 +374,7 @@ export const router = createBrowserRouter(
   },
   {
     path: '/work/devices',
-    element: <Navigate replace to="/app/work/devices" />
+    element: <Navigate replace to="/app/work/hardware" />
   },
   {
     path: '/work/printers',
