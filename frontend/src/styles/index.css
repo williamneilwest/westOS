@@ -3090,6 +3090,21 @@ textarea {
     flex-direction: column;
     align-items: stretch;
   }
+
+  .closed-tickets-filter-grid,
+  .closed-tickets-column-grid,
+  .closed-tickets-source-grid,
+  .closed-tickets-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .closed-tickets-mobile-list {
+    display: grid;
+  }
+
+  .closed-tickets-table-wrap {
+    display: none;
+  }
 }
 
 .work-domain-grid {
@@ -6420,6 +6435,287 @@ textarea {
   color: #fecdd3;
 }
 
+.status-text {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.86rem;
+}
+
+.closed-tickets-page {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.closed-tickets-settings-card,
+.closed-tickets-leaderboard-card,
+.closed-tickets-table-card {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.closed-tickets-filter-grid,
+.closed-tickets-column-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.closed-tickets-field {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.closed-tickets-field > span {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
+.closed-tickets-field input,
+.closed-tickets-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.45rem;
+  padding: 0.58rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.closed-tickets-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.45rem;
+  padding: 0 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.closed-tickets-search input {
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.closed-tickets-source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.closed-tickets-saved-source,
+.closed-tickets-file-input,
+.closed-tickets-loaded {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.closed-tickets-saved-source span,
+.closed-tickets-loaded {
+  min-width: 0;
+}
+
+.closed-tickets-saved-source strong,
+.closed-tickets-loaded {
+  color: var(--text);
+}
+
+.closed-tickets-saved-source small {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--text-soft);
+}
+
+.closed-tickets-file-input {
+  position: relative;
+  cursor: pointer;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.closed-tickets-file-input input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.closed-tickets-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.75rem;
+}
+
+.closed-tickets-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.closed-tickets-stat__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 12px;
+  color: #b6f5ec;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  flex: 0 0 auto;
+}
+
+.closed-tickets-stat strong {
+  display: block;
+  font-size: 1.15rem;
+}
+
+.closed-tickets-stat small {
+  color: var(--text-soft);
+}
+
+.closed-tickets-results-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.closed-tickets-loading,
+.closed-tickets-empty {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.closed-tickets-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.closed-tickets-leaderboard {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.closed-tickets-assignee {
+  display: grid;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.72rem 0.78rem;
+  text-align: left;
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+}
+
+.closed-tickets-assignee--active {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.closed-tickets-assignee strong {
+  display: block;
+}
+
+.closed-tickets-assignee small {
+  color: var(--text-soft);
+}
+
+.closed-tickets-assignee__bar {
+  display: block;
+  width: 100%;
+  height: 0.34rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.closed-tickets-assignee__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.55), rgba(74, 222, 128, 0.9));
+}
+
+.closed-tickets-table-wrap {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+}
+
+.closed-tickets-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.closed-tickets-table th,
+.closed-tickets-table td {
+  padding: 0.75rem 0.8rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.closed-tickets-table th {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.closed-tickets-table td {
+  font-size: 0.86rem;
+}
+
+.closed-tickets-mobile-list {
+  display: none;
+  gap: 0.65rem;
+}
+
+.closed-ticket-mobile-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.78rem 0.82rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.closed-ticket-mobile-card__head,
+.closed-ticket-mobile-card__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.closed-ticket-mobile-card__head span,
+.closed-ticket-mobile-card__meta span {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
+.closed-ticket-mobile-card p {
+  margin: 0;
+  color: var(--text);
+}
+
 .logs-toolbar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -7616,6 +7912,10 @@ textarea {
 
   .row-detail-drawer {
     width: min(76vw, 980px);
+  }
+
+  .closed-tickets-results-grid {
+    grid-template-columns: 1fr;
   }
 
   .edit-dataset-drawer {
